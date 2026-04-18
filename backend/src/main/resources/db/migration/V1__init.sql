@@ -4,8 +4,7 @@
 --   * Monetary amounts are INTEGER minor units (e.g. cents). Display logic converts.
 --   * Timestamps are TEXT ISO-8601 (SQLite CURRENT_TIMESTAMP is UTC "YYYY-MM-DD HH:MM:SS").
 --   * Every table carries created_at and updated_at; updated_at is maintained by triggers.
-
-PRAGMA foreign_keys = ON;
+--   * FK enforcement is enabled per connection via spring.datasource.hikari.connection-init-sql.
 
 -- ---------------------------------------------------------------------------
 -- Reference / config
