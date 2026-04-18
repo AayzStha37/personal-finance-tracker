@@ -1,0 +1,42 @@
+services:
+  backend:
+    build: ./backend
+    image: pft-backend:dev
+    container_name: pft-backend
+    environment:
+      PFT_DB_URL: jdbc:sqlite:/data/pft.db
+      PFT_CORS_ORIGINS: http://localhost:5173
+      JAVA_OPTS: "-Xms128m -Xmx384m"
+    ports:
+      - "8080:8080"
+    volumes:
+      - pft-data:/data
+    networks:
+      - pft-net
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep -q UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  frontend:
+    build: ./frontend
+    image: pft-frontend:dev
+    container_name: pft-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - pft-net
+    restart: unless-stopped
+
+volumes:
+  pft-data:
+
+networks:
+  pft-net:
+    driver: bridge
