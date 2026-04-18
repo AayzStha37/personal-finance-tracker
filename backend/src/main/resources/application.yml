@@ -15,10 +15,12 @@ spring:
   jpa:
     database-platform: org.hibernate.community.dialect.SQLiteDialect
     hibernate:
-      ddl-auto: validate
+      ddl-auto: none
     open-in-view: false
     properties:
       hibernate.jdbc.time_zone: UTC
+
+  # Flyway owns the schema; JPA entities must line up with the migrations.
 
   flyway:
     enabled: true
