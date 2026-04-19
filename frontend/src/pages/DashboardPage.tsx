@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -13,39 +14,59 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/client";
-import type { MonthSummaryDto } from "../api/types";
-import { Button, Card, EmptyState, StatusPill } from "../components/ui";
+import type {
+  ExpenseEntryDto,
+  IncomeEntryDto,
+  MonthSummaryDto,
+  ShareLotDto,
+} from "../api/types";
+import { Card, EmptyState, StatusPill } from "../components/ui";
 import { formatMoney, monthLabel, signedMoney } from "../lib/money";
-import NewMonthWizard from "../features/newMonth/NewMonthWizard";
 import { useApp } from "../state/AppContext";
+
+interface DashboardData {
+  summary: MonthSummaryDto;
+  prev: MonthSummaryDto | null;
+  expenses: ExpenseEntryDto[];
+  incomes: IncomeEntryDto[];
+  shareLots: ShareLotDto[];
+  prevShareLots: ShareLotDto[];
+}
 
 export default function DashboardPage() {
   const app = useApp();
-  const [summary, setSummary] = useState<MonthSummaryDto | null>(null);
-  const [prev, setPrev] = useState<MonthSummaryDto | null>(null);
+  const navigate = useNavigate();
+  const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [wizardOpen, setWizardOpen] = useState(false);
 
   async function loadLatest() {
     setLoading(true);
     setError(null);
     try {
       const months = await api.listMonths();
-      if (months.length === 0) {
-        setSummary(null);
-        setPrev(null);
+      // Find latest ACTIVE month
+      const active = months.find((m) => m.status === "ACTIVE");
+      if (!active) {
+        setData(null);
         return;
       }
-      const latest = months[0]; // sorted desc by year/month
-      const s = await api.getMonthSummary(latest.id);
-      setSummary(s);
-      if (s.previousMonthId != null) {
-        const p = await api.getMonthSummary(s.previousMonthId);
-        setPrev(p);
-      } else {
-        setPrev(null);
+      const summary = await api.getMonthSummary(active.id);
+
+      let prev: MonthSummaryDto | null = null;
+      let prevShareLots: ShareLotDto[] = [];
+      if (summary.previousMonthId != null) {
+        prev = await api.getMonthSummary(summary.previousMonthId);
+        prevShareLots = await api.listShareLots(summary.previousMonthId);
       }
+
+      const [expenses, incomes, shareLots] = await Promise.all([
+        api.listExpenses(active.id),
+        api.listIncomes(active.id),
+        api.listShareLots(active.id),
+      ]);
+
+      setData({ summary, prev, expenses, incomes, shareLots, prevShareLots });
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -66,97 +87,139 @@ export default function DashboardPage() {
     );
   }
 
-  if (!summary) {
+  if (!data) {
     return (
-      <>
-        <Card>
-          <EmptyState
-            title="No months yet"
-            description="Create your first month to start tracking balances, budgets, and investments."
-            action={<Button onClick={() => setWizardOpen(true)}>Create first month</Button>}
-          />
-        </Card>
-        <NewMonthWizard
-          open={wizardOpen}
-          onClose={() => setWizardOpen(false)}
-          onCreated={async () => {
-            await app.refresh();
-            await loadLatest();
-          }}
+      <Card>
+        <EmptyState
+          title="No active month"
+          description="Create and activate a month to see your dashboard."
         />
-      </>
+      </Card>
     );
   }
+
+  const { summary, prev, expenses, incomes, shareLots, prevShareLots } = data;
 
   return (
     <div className="space-y-6">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-wide text-slate-500">Latest month</p>
+          <p className="text-xs uppercase tracking-wide text-slate-500">Active month</p>
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-3">
             {monthLabel(summary.month.year, summary.month.month)}
             <StatusPill status={summary.month.status} />
           </h1>
         </div>
-        <Button onClick={() => setWizardOpen(true)}>+ New month</Button>
+        <button
+          onClick={() => navigate(`/months/${summary.month.id}`)}
+          className="text-sm font-medium text-indigo-600 hover:text-indigo-800 px-3 py-1.5 rounded-lg border border-indigo-200 hover:border-indigo-300 transition-colors"
+        >
+          Edit Details →
+        </button>
       </div>
 
-      <OverviewCards summary={summary} prev={prev} />
+      <OverviewCards
+        summary={summary}
+        prev={prev}
+        expenses={expenses}
+        incomes={incomes}
+        shareLots={shareLots}
+        prevShareLots={prevShareLots}
+      />
 
       <div className="grid md:grid-cols-2 gap-6">
-        <BalanceComparisonCard summary={summary} prev={prev} />
-        <BudgetCard summary={summary} />
+        <SavingsChart summary={summary} prev={prev} />
+        <BudgetCard summary={summary} expenses={expenses} />
       </div>
 
-      <NewMonthWizard
-        open={wizardOpen}
-        onClose={() => setWizardOpen(false)}
-        onCreated={async () => {
-          await app.refresh();
-          await loadLatest();
-        }}
-      />
+      <div className="grid md:grid-cols-2 gap-6">
+        <IncomeCard incomes={incomes} />
+        <ExpenseCard expenses={expenses} />
+      </div>
     </div>
   );
-
-  // --- Sub-components close over outer state via props ----------------------
 }
+
+// ---------------------------------------------------------------------------
+// Overview stat cards
+// ---------------------------------------------------------------------------
 
 function OverviewCards({
   summary,
   prev,
+  expenses,
+  incomes,
+  shareLots,
+  prevShareLots,
 }: {
   summary: MonthSummaryDto;
   prev: MonthSummaryDto | null;
+  expenses: ExpenseEntryDto[];
+  incomes: IncomeEntryDto[];
+  shareLots: ShareLotDto[];
+  prevShareLots: ShareLotDto[];
 }) {
   const { currencies } = useApp();
   const base = currencies?.base ?? "CAD";
 
   const totalOpening = sumBy(summary.balances, (b) => b.openingAmount ?? 0);
-  const totalClosing = sumBy(summary.balances, (b) => b.closingAmount ?? 0);
+  const prevOpening = prev ? sumBy(prev.balances, (b) => b.openingAmount ?? 0) : null;
+  const openingDelta = prevOpening != null ? totalOpening - prevOpening : null;
+
   const totalBudget = sumBy(summary.budgets, (b) => b.limitAmount ?? 0);
-  const prevClosing = prev ? sumBy(prev.balances, (b) => b.closingAmount ?? 0) : null;
+  const totalSpent = sumBy(expenses, (e) => e.amount);
+  const budgetDiff = totalBudget - totalSpent;
+
+  const totalInvested = sumBy(shareLots, (l) => Math.round(Number(l.shares) * l.buyPricePerShare));
+  const prevInvested = sumBy(prevShareLots, (l) => Math.round(Number(l.shares) * l.buyPricePerShare));
+  const investDelta = totalInvested - prevInvested;
+
+  const totalIncome = sumBy(incomes, (i) => i.netAmount);
+  const totalExpense = sumBy(expenses, (e) => e.amount);
 
   return (
-    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      {/* Total Opening */}
       <Stat
-        label="Total opening"
+        label="Total Opening"
         value={formatMoney(totalOpening, base, currencies?.currencies)}
-        hint={prevClosing != null ? `prev closing ${formatMoney(prevClosing, base, currencies?.currencies)}` : undefined}
+        delta={openingDelta}
+        currency={base}
       />
+
+      {/* Budget */}
       <Stat
-        label="Total closing"
-        value={formatMoney(totalClosing, base, currencies?.currencies)}
-        hint={
-          totalClosing - totalOpening !== 0
-            ? `Δ ${signedMoney(totalClosing - totalOpening, base, currencies?.currencies)}`
-            : "no movement yet"
-        }
-        deltaTone={totalClosing - totalOpening >= 0 ? "pos" : "neg"}
-      />
-      <Stat
-        label="Total budget"
+        label="Budget"
         value={formatMoney(totalBudget, base, currencies?.currencies)}
+        budgetStatus={
+          totalBudget === 0
+            ? null
+            : budgetDiff > 0
+              ? { tone: "pos" as const, label: `${formatMoney(budgetDiff, base, currencies?.currencies)} under` }
+              : budgetDiff === 0
+                ? { tone: "neutral" as const, label: "On par" }
+                : { tone: "neg" as const, label: `${formatMoney(Math.abs(budgetDiff), base, currencies?.currencies)} over` }
+        }
+      />
+
+      {/* Investments */}
+      <Stat
+        label="Investments"
+        value={formatMoney(totalInvested, base, currencies?.currencies)}
+        delta={prevOpening != null ? investDelta : null}
+        currency={base}
+      />
+
+      {/* Income */}
+      <Stat
+        label="Income"
+        value={formatMoney(totalIncome, base, currencies?.currencies)}
+      />
+
+      {/* Expenses */}
+      <Stat
+        label="Expenses"
+        value={formatMoney(totalExpense, base, currencies?.currencies)}
       />
     </div>
   );
@@ -165,72 +228,98 @@ function OverviewCards({
 function Stat({
   label,
   value,
-  hint,
-  deltaTone,
+  delta,
+  currency,
+  budgetStatus,
 }: {
   label: string;
   value: string;
-  hint?: string;
-  deltaTone?: "pos" | "neg";
+  delta?: number | null;
+  currency?: string;
+  budgetStatus?: { tone: "pos" | "neutral" | "neg"; label: string } | null;
 }) {
+  const { currencies } = useApp();
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 px-4 py-3">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
       <p className="text-xl font-semibold text-slate-900 mt-1">{value}</p>
-      {hint && (
+
+      {delta != null && (
         <p
-          className={`text-xs mt-1 ${
-            deltaTone === "pos"
-              ? "text-emerald-600"
-              : deltaTone === "neg"
-                ? "text-rose-600"
-                : "text-slate-500"
+          className={`text-xs mt-1 font-medium flex items-center gap-1 ${
+            delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-600" : "text-slate-500"
           }`}
         >
-          {hint}
+          {delta > 0 ? "▲" : delta < 0 ? "▼" : ""}
+          {signedMoney(delta, currency ?? null, currencies?.currencies)}
+        </p>
+      )}
+
+      {budgetStatus && (
+        <p
+          className={`text-xs mt-1 font-medium ${
+            budgetStatus.tone === "pos"
+              ? "text-emerald-600"
+              : budgetStatus.tone === "neg"
+                ? "text-rose-600"
+                : "text-amber-600"
+          }`}
+        >
+          {budgetStatus.label}
         </p>
       )}
     </div>
   );
 }
 
-function BalanceComparisonCard({
+// ---------------------------------------------------------------------------
+// Savings chart — BANK (active) + CASH only, comparing opening balances
+// ---------------------------------------------------------------------------
+
+function SavingsChart({
   summary,
   prev,
 }: {
   summary: MonthSummaryDto;
   prev: MonthSummaryDto | null;
 }) {
-  const { currencies } = useApp();
+  const { accounts, currencies } = useApp();
 
-  const prevClosingByAcct = new Map(
-    (prev?.balances ?? []).map((b) => [b.accountId, b.closingAmount ?? null] as const),
+  // Filter to active BANK + CASH accounts
+  const eligibleIds = new Set(
+    accounts
+      .filter((a) => a.active && (a.kind === "BANK" || a.kind === "CASH"))
+      .map((a) => a.id),
   );
 
-  const rows = summary.balances.map((b) => {
-    const prevClose = prevClosingByAcct.get(b.accountId) ?? null;
-    const delta =
-      prevClose != null && b.closingAmount != null ? b.closingAmount - prevClose : null;
-    return { ...b, prevClose, delta };
-  });
+  const rows = summary.balances
+    .filter((b) => eligibleIds.has(b.accountId))
+    .map((b) => {
+      const prevBal = prev?.balances.find((p) => p.accountId === b.accountId);
+      const prevOpen = prevBal?.openingAmount ?? null;
+      const curOpen = b.openingAmount ?? 0;
+      const delta = prevOpen != null ? curOpen - prevOpen : null;
+      return { ...b, prevOpen, curOpen, delta };
+    });
 
   const chartData = rows.map((r) => {
     const decimals = currencies?.currencies.find((c) => c.code === r.currency)?.decimals ?? 2;
     const factor = Math.pow(10, decimals);
     return {
       name: r.accountName,
-      previous: r.prevClose != null ? r.prevClose / factor : 0,
-      current: r.closingAmount != null ? r.closingAmount / factor : (r.openingAmount ?? 0) / factor,
+      previous: r.prevOpen != null ? r.prevOpen / factor : 0,
+      current: r.curOpen / factor,
     };
   });
 
   return (
     <Card
-      title="Balances — change from previous month"
-      subtitle="Prev closing vs. current closing (falls back to opening if not yet closed)."
+      title="Savings — opening balance trend"
+      subtitle="Active bank & cash accounts: previous vs. current opening."
     >
       {rows.length === 0 ? (
-        <EmptyState title="No balances yet" description="Create accounts and run the wizard." />
+        <EmptyState title="No savings accounts" description="Add active bank or cash accounts." />
       ) : (
         <>
           <div className="h-56">
@@ -241,8 +330,8 @@ function BalanceComparisonCard({
                 <YAxis tick={{ fontSize: 11 }} />
                 <Tooltip />
                 <Legend wrapperStyle={{ fontSize: 11 }} />
-                <Bar dataKey="previous" fill="#cbd5e1" name="Previous closing" />
-                <Bar dataKey="current" fill="#0f172a" name="Current" />
+                <Bar dataKey="previous" fill="#cbd5e1" name="Prev opening" />
+                <Bar dataKey="current" fill="#0f172a" name="Current opening" />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -250,9 +339,9 @@ function BalanceComparisonCard({
             <thead className="text-xs uppercase text-slate-500">
               <tr className="border-b border-slate-200">
                 <th className="text-left py-1.5">Account</th>
-                <th className="text-right">Prev close</th>
-                <th className="text-right">Now</th>
-                <th className="text-right">Δ</th>
+                <th className="text-right">Prev opening</th>
+                <th className="text-right">Current opening</th>
+                <th className="text-right">Change</th>
               </tr>
             </thead>
             <tbody>
@@ -260,24 +349,20 @@ function BalanceComparisonCard({
                 <tr key={r.accountId} className="border-b border-slate-100">
                   <td className="py-1.5 text-slate-800">{r.accountName}</td>
                   <td className="py-1.5 text-right text-slate-600">
-                    {formatMoney(r.prevClose, r.currency, currencies?.currencies)}
+                    {formatMoney(r.prevOpen, r.currency, currencies?.currencies)}
                   </td>
                   <td className="py-1.5 text-right text-slate-900">
-                    {formatMoney(
-                      r.closingAmount ?? r.openingAmount,
-                      r.currency,
-                      currencies?.currencies,
-                    )}
+                    {formatMoney(r.curOpen, r.currency, currencies?.currencies)}
                   </td>
                   <td
-                    className={`py-1.5 text-right ${
+                    className={`py-1.5 text-right font-medium ${
                       r.delta == null
                         ? "text-slate-400"
-                        : r.delta === 0
-                          ? "text-slate-500"
-                          : r.delta > 0
-                            ? "text-emerald-600"
-                            : "text-rose-600"
+                        : r.delta > 0
+                          ? "text-emerald-600"
+                          : r.delta < 0
+                            ? "text-rose-600"
+                            : "text-slate-500"
                     }`}
                   >
                     {signedMoney(r.delta, r.currency, currencies?.currencies)}
@@ -292,52 +377,218 @@ function BalanceComparisonCard({
   );
 }
 
-function BudgetCard({ summary }: { summary: MonthSummaryDto }) {
+// ---------------------------------------------------------------------------
+// Budget card — pie chart + under/par/over status per category
+// ---------------------------------------------------------------------------
+
+function BudgetCard({
+  summary,
+  expenses,
+}: {
+  summary: MonthSummaryDto;
+  expenses: ExpenseEntryDto[];
+}) {
   const { currencies } = useApp();
   const base = currencies?.base ?? "CAD";
 
-  const pie = summary.budgets
+  // Sum expenses by category
+  const spentByCategory = new Map<number, number>();
+  for (const e of expenses) {
+    spentByCategory.set(e.categoryId, (spentByCategory.get(e.categoryId) ?? 0) + e.amount);
+  }
+
+  const budgetRows = summary.budgets
     .filter((b) => (b.limitAmount ?? 0) > 0)
     .map((b) => {
-      const decimals =
-        currencies?.currencies.find((c) => c.code === (b.currency ?? base))?.decimals ?? 2;
-      return {
-        name: b.categoryLabel,
-        value: (b.limitAmount ?? 0) / Math.pow(10, decimals),
-      };
+      const limit = b.limitAmount ?? 0;
+      const spent = spentByCategory.get(b.categoryId) ?? 0;
+      const diff = limit - spent;
+      return { ...b, spent, diff };
     });
+
+  const pie = budgetRows.map((b) => {
+    const decimals =
+      currencies?.currencies.find((c) => c.code === (b.currency ?? base))?.decimals ?? 2;
+    return {
+      name: b.categoryLabel,
+      value: (b.limitAmount ?? 0) / Math.pow(10, decimals),
+    };
+  });
 
   const colors = ["#0f172a", "#334155", "#64748b", "#94a3b8", "#0891b2", "#0ea5e9", "#f59e0b"];
 
   return (
-    <Card title="Budget allocation" subtitle={`Limits for this month (${base}).`}>
-      {pie.length === 0 ? (
-        <EmptyState title="No budgets set" description="Run the wizard step 3 to set limits." />
+    <Card title="Budget" subtitle={`Limits vs. spending (${base}).`}>
+      {budgetRows.length === 0 ? (
+        <EmptyState title="No budgets set" description="Set budget limits for this month." />
       ) : (
-        <div className="h-56">
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={pie}
-                dataKey="value"
-                nameKey="name"
-                outerRadius={80}
-                innerRadius={44}
-                paddingAngle={2}
-              >
-                {pie.map((_, i) => (
-                  <Cell key={i} fill={colors[i % colors.length]} />
-                ))}
-              </Pie>
-              <Tooltip formatter={(v: number) => v.toFixed(2)} />
-              <Legend wrapperStyle={{ fontSize: 11 }} />
-            </PieChart>
-          </ResponsiveContainer>
-        </div>
+        <>
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <PieChart>
+                <Pie
+                  data={pie}
+                  dataKey="value"
+                  nameKey="name"
+                  outerRadius={72}
+                  innerRadius={40}
+                  paddingAngle={2}
+                >
+                  {pie.map((_, i) => (
+                    <Cell key={i} fill={colors[i % colors.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(v: number) => v.toFixed(2)} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+          <table className="w-full text-sm mt-2">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-1.5">Category</th>
+                <th className="text-right">Limit</th>
+                <th className="text-right">Spent</th>
+                <th className="text-right">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {budgetRows.map((b) => (
+                <tr key={b.categoryId} className="border-b border-slate-100">
+                  <td className="py-1.5 text-slate-800">{b.categoryLabel}</td>
+                  <td className="py-1.5 text-right text-slate-600">
+                    {formatMoney(b.limitAmount, b.currency ?? base, currencies?.currencies)}
+                  </td>
+                  <td className="py-1.5 text-right text-slate-600">
+                    {formatMoney(b.spent, b.currency ?? base, currencies?.currencies)}
+                  </td>
+                  <td
+                    className={`py-1.5 text-right text-xs font-medium ${
+                      b.diff > 0
+                        ? "text-emerald-600"
+                        : b.diff === 0
+                          ? "text-amber-600"
+                          : "text-rose-600"
+                    }`}
+                  >
+                    {b.diff > 0
+                      ? `${formatMoney(b.diff, b.currency ?? base, currencies?.currencies)} under`
+                      : b.diff === 0
+                        ? "On par"
+                        : `${formatMoney(Math.abs(b.diff), b.currency ?? base, currencies?.currencies)} over`}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
     </Card>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Income snapshot
+// ---------------------------------------------------------------------------
+
+function IncomeCard({ incomes }: { incomes: IncomeEntryDto[] }) {
+  const { currencies } = useApp();
+  const base = currencies?.base ?? "CAD";
+  const total = sumBy(incomes, (i) => i.netAmount);
+
+  return (
+    <Card title="Income" subtitle="Net income received this month.">
+      {incomes.length === 0 ? (
+        <EmptyState title="No income" description="Add income entries from the month page." />
+      ) : (
+        <>
+          <p className="text-2xl font-semibold text-slate-900 mb-3">
+            {formatMoney(total, base, currencies?.currencies)}
+          </p>
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-1.5">Source</th>
+                <th className="text-right">Date</th>
+                <th className="text-right">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incomes.map((i) => (
+                <tr key={i.id} className="border-b border-slate-100">
+                  <td className="py-1.5 text-slate-800">{i.source}</td>
+                  <td className="py-1.5 text-right text-slate-500 text-xs">{i.receivedDate}</td>
+                  <td className="py-1.5 text-right text-emerald-700 font-medium">
+                    {formatMoney(i.netAmount, i.currency, currencies?.currencies)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Expense snapshot
+// ---------------------------------------------------------------------------
+
+function ExpenseCard({ expenses }: { expenses: ExpenseEntryDto[] }) {
+  const { currencies, categories } = useApp();
+  const base = currencies?.base ?? "CAD";
+  const total = sumBy(expenses, (e) => e.amount);
+
+  // Group by category
+  const byCat = new Map<number, { label: string; total: number; count: number }>();
+  for (const e of expenses) {
+    const entry = byCat.get(e.categoryId) ?? {
+      label: categories.find((c) => c.id === e.categoryId)?.label ?? "Other",
+      total: 0,
+      count: 0,
+    };
+    entry.total += e.amount;
+    entry.count += 1;
+    byCat.set(e.categoryId, entry);
+  }
+
+  return (
+    <Card title="Expenses" subtitle="Total spending this month.">
+      {expenses.length === 0 ? (
+        <EmptyState title="No expenses" description="Add expense entries from the month page." />
+      ) : (
+        <>
+          <p className="text-2xl font-semibold text-slate-900 mb-3">
+            {formatMoney(total, base, currencies?.currencies)}
+          </p>
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-1.5">Category</th>
+                <th className="text-right">Items</th>
+                <th className="text-right">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {[...byCat.entries()].map(([catId, { label, total: catTotal, count }]) => (
+                <tr key={catId} className="border-b border-slate-100">
+                  <td className="py-1.5 text-slate-800">{label}</td>
+                  <td className="py-1.5 text-right text-slate-500">{count}</td>
+                  <td className="py-1.5 text-right text-rose-700 font-medium">
+                    {formatMoney(catTotal, base, currencies?.currencies)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+    </Card>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 function sumBy<T>(xs: T[], sel: (x: T) => number): number {
   return xs.reduce((acc, x) => acc + (sel(x) || 0), 0);
