@@ -1,7 +1,6 @@
 package com.pft.service;
 
 import com.pft.domain.ExpenseEntry;
-import com.pft.repository.AccountRepository;
 import com.pft.repository.BudgetCategoryRepository;
 import com.pft.repository.CurrencyRepository;
 import com.pft.repository.ExpenseEntryRepository;
@@ -27,18 +26,15 @@ public class ExpenseService {
 
     private final ExpenseEntryRepository expenses;
     private final BudgetCategoryRepository categories;
-    private final AccountRepository accounts;
     private final CurrencyRepository currencies;
     private final LockGuard lockGuard;
 
     public ExpenseService(ExpenseEntryRepository expenses,
                           BudgetCategoryRepository categories,
-                          AccountRepository accounts,
                           CurrencyRepository currencies,
                           LockGuard lockGuard) {
         this.expenses = expenses;
         this.categories = categories;
-        this.accounts = accounts;
         this.currencies = currencies;
         this.lockGuard = lockGuard;
     }
@@ -55,7 +51,6 @@ public class ExpenseService {
         ExpenseEntry e = ExpenseEntry.builder()
                 .monthId(monthId)
                 .categoryId(req.categoryId())
-                .accountId(req.accountId())
                 .description(req.description())
                 .amount(req.amount())
                 .currency(req.currency())
@@ -73,7 +68,6 @@ public class ExpenseService {
         }
         validateRefs(req);
         e.setCategoryId(req.categoryId());
-        e.setAccountId(req.accountId());
         e.setDescription(req.description());
         e.setAmount(req.amount());
         e.setCurrency(req.currency());
@@ -100,9 +94,6 @@ public class ExpenseService {
         if (!categories.existsById(req.categoryId())) {
             throw new BadRequestException("Unknown category id: " + req.categoryId());
         }
-        if (!accounts.existsById(req.accountId())) {
-            throw new BadRequestException("Unknown account id: " + req.accountId());
-        }
         if (!currencies.existsById(req.currency())) {
             throw new BadRequestException("Unknown currency: " + req.currency());
         }
@@ -110,7 +101,7 @@ public class ExpenseService {
 
     static ExpenseEntryDto toDto(ExpenseEntry e) {
         return new ExpenseEntryDto(
-                e.getId(), e.getMonthId(), e.getCategoryId(), e.getAccountId(),
+                e.getId(), e.getMonthId(), e.getCategoryId(),
                 e.getDescription(), e.getAmount(), e.getCurrency(),
                 e.getTxDate(), e.getEmiInstallmentId());
     }

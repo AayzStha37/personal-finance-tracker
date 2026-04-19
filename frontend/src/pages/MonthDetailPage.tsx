@@ -181,6 +181,25 @@ export default function MonthDetailPage() {
   const accountName = (aid: number | null) =>
     aid == null ? "—" : accounts.find((a) => a.id === aid)?.name ?? `Account #${aid}`;
 
+  // Group expenses by category (sorted by category displayOrder)
+  const expensesByCategory = (() => {
+    const grouped = new Map<number, ExpenseEntryDto[]>();
+    for (const x of expenses) {
+      const list = grouped.get(x.categoryId) ?? [];
+      list.push(x);
+      grouped.set(x.categoryId, list);
+    }
+    // Sort groups by category displayOrder
+    return [...grouped.entries()]
+      .map(([cid, items]) => ({
+        categoryId: cid,
+        label: categoryLabel(cid),
+        displayOrder: categories.find((c) => c.id === cid)?.displayOrder ?? 999,
+        items,
+      }))
+      .sort((a, b) => a.displayOrder - b.displayOrder);
+  })();
+
   return (
     <div className="space-y-6">
       <header className="flex items-start justify-between gap-4">
@@ -395,57 +414,57 @@ export default function MonthDetailPage() {
         {expenses.length === 0 ? (
           <p className="text-sm text-slate-500">No expenses logged this month.</p>
         ) : (
-          <table className="w-full text-sm">
-            <thead className="text-xs uppercase text-slate-500">
-              <tr className="border-b border-slate-200">
-                <th className="text-left py-1.5">Date</th>
-                <th className="text-left">Description</th>
-                <th className="text-left">Category</th>
-                <th className="text-left">Account</th>
-                <th className="text-right">Amount</th>
-                <th className="text-right">Action</th>
-              </tr>
-            </thead>
-            <tbody>
-              {expenses.map((x) => (
-                <tr key={x.id} className="border-b border-slate-100">
-                  <td className="py-1.5 text-slate-700">{x.txDate}</td>
-                  <td className="py-1.5 text-slate-800">
-                    {x.description}
-                    {x.emiInstallmentId != null && (
-                      <Badge variant="info">
-                        <span className="ml-2">EMI</span>
-                      </Badge>
-                    )}
-                  </td>
-                  <td className="py-1.5 text-slate-600">{categoryLabel(x.categoryId)}</td>
-                  <td className="py-1.5 text-slate-600">{accountName(x.accountId)}</td>
-                  <td className="py-1.5 text-right">
-                    {formatMoney(x.amount, x.currency, currencies?.currencies)}
-                  </td>
-                  <td className="py-1.5 text-right">
-                    {!locked && x.emiInstallmentId == null && (
-                      <>
-                        <button
-                          className="text-slate-700 hover:text-slate-900 text-sm font-medium mr-3"
-                          onClick={() => setEditingExpense(x)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="text-rose-600 hover:text-rose-800 text-sm font-medium"
-                          onClick={() => deleteExpense(x.id)}
-                          disabled={busy}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <div className="flex gap-6 overflow-x-auto pb-2">
+            {expensesByCategory.map((group) => (
+              <div key={group.categoryId} className="min-w-[280px] flex-shrink-0">
+                <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 mb-3">
+                  <span className="text-sm font-semibold text-indigo-700">{group.label}</span>
+                </div>
+                <div className="space-y-2">
+                  {group.items.map((x) => (
+                    <div
+                      key={x.id}
+                      className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-medium text-slate-800 truncate">
+                            {x.description}
+                            {x.emiInstallmentId != null && (
+                              <Badge variant="info">
+                                <span className="ml-1">EMI</span>
+                              </Badge>
+                            )}
+                          </p>
+                          <p className="text-xs text-slate-500 mt-0.5">{x.txDate}</p>
+                        </div>
+                        <span className="font-semibold text-slate-900 whitespace-nowrap">
+                          {formatMoney(x.amount, x.currency, currencies?.currencies)}
+                        </span>
+                      </div>
+                      {!locked && x.emiInstallmentId == null && (
+                        <div className="flex gap-3 mt-2 pt-2 border-t border-slate-200">
+                          <button
+                            className="text-xs font-medium text-slate-600 hover:text-slate-900"
+                            onClick={() => setEditingExpense(x)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="text-xs font-medium text-rose-600 hover:text-rose-800"
+                            onClick={() => deleteExpense(x.id)}
+                            disabled={busy}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
         )}
       </Card>
 
@@ -642,18 +661,14 @@ function ExpenseEditor({
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
-  const { accounts, categories, currencies } = useApp();
+  const { categories, currencies } = useApp();
   const today = new Date().toISOString().slice(0, 10);
-  const defaultAccount = accounts[0];
   const [categoryId, setCategoryId] = useState<number>(
     initial?.categoryId ?? categories[0]?.id ?? 0,
   );
-  const [accountId, setAccountId] = useState<number>(
-    initial?.accountId ?? defaultAccount?.id ?? 0,
-  );
   const [description, setDescription] = useState(initial?.description ?? "");
   const [currency, setCurrency] = useState(
-    initial?.currency ?? defaultAccount?.currency ?? currencies?.currencies[0]?.code ?? "CAD",
+    initial?.currency ?? currencies?.currencies[0]?.code ?? "CAD",
   );
   const [amount, setAmount] = useState(
     initial ? fromMinor(initial.amount, initial.currency, currencies?.currencies) : "",
@@ -674,7 +689,6 @@ function ExpenseEditor({
     }
     const body: ExpenseEntryRequest = {
       categoryId,
-      accountId,
       description: description.trim(),
       amount: amountMinor,
       currency,
@@ -723,16 +737,6 @@ function ExpenseEditor({
             {categories.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.label}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <Label>Account</Label>
-          <Select value={accountId} onChange={(e) => setAccountId(Number(e.target.value))}>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.currency})
               </option>
             ))}
           </Select>

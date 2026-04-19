@@ -8,7 +8,17 @@
       "Bash(python -m code_review_graph --help)",
       "Bash(python -c \"import code_review_graph; print\\(code_review_graph.__file__\\)\")",
       "Bash(python -m code_review_graph build)",
-      "Bash(python -m code_review_graph status)"
+      "Bash(python -m code_review_graph status)",
+      "Bash(./mvnw test:*)",
+      "Bash(ls \"D:/Personal Projects/Personal Finance tracker/personal-finance-tracker/backend/mvnw\"*)",
+      "Bash(ls \"D:/Personal Projects/Personal Finance tracker/personal-finance-tracker/backend/\"*.cmd)",
+      "Bash(mvn test:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(ls node_modules/.bin/tsc*)",
+      "Bash(node_modules/.bin/tsc --noEmit)",
+      "Bash(npm install:*)",
+      "Bash(./node_modules/.bin/tsc --noEmit)"
     ]
   },
   "enableAllProjectMcpServers": true,

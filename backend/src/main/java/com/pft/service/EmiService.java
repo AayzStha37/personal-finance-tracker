@@ -202,7 +202,6 @@ public class EmiService {
         ExpenseEntry e = expenses.save(ExpenseEntry.builder()
                 .monthId(dueMonth.getId())
                 .categoryId(plan.getCategoryId())
-                .accountId(plan.getAccountId())
                 .description("EMI: " + plan.getLabel()
                         + " (" + inst.getSeqNo() + "/" + plan.getTotalInstallments() + ")")
                 .amount(inst.getAmount())

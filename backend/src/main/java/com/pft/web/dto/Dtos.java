@@ -193,14 +193,13 @@ public final class Dtos {
     }
 
     public record ExpenseEntryDto(
-            Long id, Long monthId, Long categoryId, Long accountId,
+            Long id, Long monthId, Long categoryId,
             String description, long amount, String currency,
             String txDate, Long emiInstallmentId) {
     }
 
     public record ExpenseEntryRequest(
             @NotNull Long categoryId,
-            @NotNull Long accountId,
             @NotBlank String description,
             @NotNull @PositiveOrZero Long amount,
             @NotBlank String currency,

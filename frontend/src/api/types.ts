@@ -224,7 +224,6 @@ export interface ExpenseEntryDto {
   id: number;
   monthId: number;
   categoryId: number;
-  accountId: number;
   description: string;
   amount: number;
   currency: string;
@@ -234,7 +233,6 @@ export interface ExpenseEntryDto {
 
 export interface ExpenseEntryRequest {
   categoryId: number;
-  accountId: number;
   description: string;
   amount: number;
   currency: string;

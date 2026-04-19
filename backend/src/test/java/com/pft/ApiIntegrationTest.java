@@ -112,18 +112,18 @@ class ApiIntegrationTest {
 
         // --- expense CRUD on May --------------------------------------------
         long expId = postJson("/api/months/" + mayId + "/expenses", """
-                {"categoryId":%d,"accountId":%d,"description":"Rent",
+                {"categoryId":%d,"description":"Rent",
                  "amount":150000,"currency":"CAD","txDate":"2026-05-01"}
-                """.formatted(mandatoryId, accountId)).get("id").asLong();
+                """.formatted(mandatoryId)).get("id").asLong();
 
         JsonNode expList = getJson("/api/months/" + mayId + "/expenses");
         // one EMI-projected expense + the one we just created
         assertThat(expList).hasSize(2);
 
         postJsonExpect(put("/api/expenses/" + expId), """
-                {"categoryId":%d,"accountId":%d,"description":"Rent (updated)",
+                {"categoryId":%d,"description":"Rent (updated)",
                  "amount":160000,"currency":"CAD","txDate":"2026-05-01"}
-                """.formatted(mandatoryId, accountId), 200);
+                """.formatted(mandatoryId), 200);
 
         // delete on manual expense: OK
         mvc.perform(delete("/api/expenses/" + expId)).andExpect(status().isNoContent());
@@ -149,9 +149,9 @@ class ApiIntegrationTest {
         mvc.perform(post("/api/months/" + aprilId + "/expenses")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"categoryId":%d,"accountId":%d,"description":"x",
+                                {"categoryId":%d,"description":"x",
                                  "amount":1,"currency":"CAD","txDate":"2026-04-10"}
-                                """.formatted(mandatoryId, accountId)))
+                                """.formatted(mandatoryId)))
                 .andExpect(status().isConflict());
 
         // --- lock enforcement for incomes: create on locked April 409 ------

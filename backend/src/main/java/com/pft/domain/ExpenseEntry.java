@@ -22,9 +22,6 @@ public class ExpenseEntry {
     @Column(name = "category_id", nullable = false)
     private Long categoryId;
 
-    @Column(name = "account_id", nullable = false)
-    private Long accountId;
-
     @Column(name = "description", nullable = false)
     private String description;
 
