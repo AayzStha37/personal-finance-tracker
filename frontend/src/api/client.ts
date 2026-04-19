@@ -9,6 +9,9 @@ import type {
   BudgetUpdate,
   CreateMonthRequest,
   CurrenciesResponse,
+  EmiInstallmentDto,
+  EmiPlanDto,
+  EmiPlanRequest,
   IntegrityCheckDto,
   InvestmentDto,
   InvestmentRequest,
@@ -81,8 +84,12 @@ export const api = {
     }),
   activateMonth: (id: number) =>
     request<MonthDto>(`/months/${id}/activate`, { method: "POST" }),
+  lockMonth: (id: number) =>
+    request<MonthDto>(`/months/${id}/lock`, { method: "POST" }),
   runIntegrity: (id: number) =>
     request<IntegrityCheckDto>(`/months/${id}/integrity-check`, { method: "POST" }),
+  listMonthEmiInstallments: (id: number) =>
+    request<EmiInstallmentDto[]>(`/months/${id}/emi-installments`),
 
   // Balances
   listBalances: (monthId: number) =>
@@ -146,4 +153,17 @@ export const api = {
 
   // Currencies
   listCurrencies: () => request<CurrenciesResponse>("/currencies"),
+
+  // EMI
+  listEmiPlans: () => request<EmiPlanDto[]>("/emi/plans"),
+  getEmiPlan: (id: number) => request<EmiPlanDto>(`/emi/plans/${id}`),
+  createEmiPlan: (req: EmiPlanRequest) =>
+    request<EmiPlanDto>("/emi/plans", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  cancelEmiPlan: (id: number) =>
+    request<EmiPlanDto>(`/emi/plans/${id}/cancel`, { method: "POST" }),
+  skipEmiInstallment: (id: number) =>
+    request<EmiInstallmentDto>(`/emi/installments/${id}/skip`, { method: "POST" }),
 };

@@ -27,6 +27,7 @@ public class MonthService {
     private final BalanceService balanceService;
     private final BudgetService budgetService;
     private final InvestmentService investmentService;
+    private final EmiService emiService;
 
     public MonthService(MonthRepository months,
                         AccountRepository accounts,
@@ -37,7 +38,8 @@ public class MonthService {
                         MonthlyInvestmentSnapshotRepository investmentSnapshots,
                         BalanceService balanceService,
                         BudgetService budgetService,
-                        InvestmentService investmentService) {
+                        InvestmentService investmentService,
+                        EmiService emiService) {
         this.months = months;
         this.accounts = accounts;
         this.balanceSnapshots = balanceSnapshots;
@@ -48,6 +50,7 @@ public class MonthService {
         this.balanceService = balanceService;
         this.budgetService = budgetService;
         this.investmentService = investmentService;
+        this.emiService = emiService;
     }
 
     // ---- Queries --------------------------------------------------------
@@ -99,6 +102,10 @@ public class MonthService {
         if (rollBalances) seedBalances(created, previous);
         if (rollBudgets) seedBudgets(created, previous);
         if (rollInvestments) seedInvestmentSnapshots(created, previous);
+
+        // Project any EMI installments that come due in this month into
+        // concrete expense entries.
+        emiService.materialiseForMonth(created);
 
         // Auto-compute integrity if we can.
         runIntegrity(created, previous);
@@ -193,8 +200,10 @@ public class MonthService {
 
         boolean hasAnyBalances = !currentSnaps.isEmpty();
         boolean ok = hasAnyBalances && allMatch;
-        current.setIntegrityOk(ok);
-        months.save(current);
+        if (current.getStatus() != MonthStatus.LOCKED) {
+            current.setIntegrityOk(ok);
+            months.save(current);
+        }
         return new IntegrityCheckDto(ok, comparisons);
     }
 
@@ -212,6 +221,25 @@ public class MonthService {
                     "Integrity check failed: opening balances must match previous month's closing");
         }
         m.setStatus(MonthStatus.ACTIVE);
+        return toDto(months.save(m));
+    }
+
+    // ---- Lock -----------------------------------------------------------
+
+    public MonthDto lock(Long id) {
+        Month m = requireMonth(id);
+        if (m.getStatus() == MonthStatus.LOCKED) {
+            throw new ConflictException("Month is already LOCKED");
+        }
+        if (m.getStatus() != MonthStatus.ACTIVE) {
+            throw new ConflictException("Only ACTIVE months can be locked; activate first");
+        }
+        if (!m.isIntegrityOk()) {
+            throw new BadRequestException(
+                    "Cannot lock a month whose integrity check is not passing");
+        }
+        m.setStatus(MonthStatus.LOCKED);
+        m.setLockedAt(Instant.now().toString());
         return toDto(months.save(m));
     }
 
