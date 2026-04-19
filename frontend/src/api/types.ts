@@ -152,6 +152,27 @@ export interface ApiError {
   details: string[] | null;
 }
 
+// ---- Exchange rates --------------------------------------------------
+
+export type ExchangeRateSource = "AUTO" | "MANUAL";
+
+export interface ExchangeRateDto {
+  id: number;
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number | string;
+  effectiveMonth: string;
+  source: ExchangeRateSource;
+  fetchedAt: string | null;
+}
+
+export interface ExchangeRateUpsert {
+  fromCurrency: string;
+  toCurrency: string;
+  rate: number | string;
+  effectiveMonth: string;
+}
+
 // ---- EMI --------------------------------------------------------------
 
 export type InstallmentStatus = "PROJECTED" | "PAID" | "SKIPPED";

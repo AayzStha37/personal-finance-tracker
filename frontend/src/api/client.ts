@@ -12,6 +12,8 @@ import type {
   EmiInstallmentDto,
   EmiPlanDto,
   EmiPlanRequest,
+  ExchangeRateDto,
+  ExchangeRateUpsert,
   ExpenseEntryDto,
   ExpenseEntryRequest,
   IncomeEntryDto,
@@ -186,6 +188,24 @@ export const api = {
     }),
   deleteExpense: (id: number) =>
     request<void>(`/expenses/${id}`, { method: "DELETE" }),
+
+  // Exchange rates
+  listExchangeRates: (month?: string) =>
+    request<ExchangeRateDto[]>(
+      month ? `/exchange-rates?month=${encodeURIComponent(month)}` : "/exchange-rates",
+    ),
+  upsertExchangeRate: (req: ExchangeRateUpsert) =>
+    request<ExchangeRateDto>("/exchange-rates", {
+      method: "PUT",
+      body: JSON.stringify(req),
+    }),
+  autoFetchExchangeRate: (from: string, to: string, month: string) =>
+    request<ExchangeRateDto>(
+      `/exchange-rates/auto-fetch?from=${encodeURIComponent(from)}&to=${encodeURIComponent(
+        to,
+      )}&month=${encodeURIComponent(month)}`,
+      { method: "POST" },
+    ),
 
   // Incomes
   listIncomes: (monthId: number) =>
