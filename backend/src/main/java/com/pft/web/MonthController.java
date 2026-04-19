@@ -2,6 +2,7 @@ package com.pft.web;
 
 import com.pft.service.BalanceService;
 import com.pft.service.BudgetService;
+import com.pft.service.EmiService;
 import com.pft.service.InvestmentService;
 import com.pft.service.MonthService;
 import com.pft.web.dto.Dtos.*;
@@ -19,15 +20,18 @@ public class MonthController {
     private final BalanceService balanceService;
     private final BudgetService budgetService;
     private final InvestmentService investmentService;
+    private final EmiService emiService;
 
     public MonthController(MonthService monthService,
                            BalanceService balanceService,
                            BudgetService budgetService,
-                           InvestmentService investmentService) {
+                           InvestmentService investmentService,
+                           EmiService emiService) {
         this.monthService = monthService;
         this.balanceService = balanceService;
         this.budgetService = budgetService;
         this.investmentService = investmentService;
+        this.emiService = emiService;
     }
 
     @GetMapping
@@ -67,6 +71,11 @@ public class MonthController {
         return monthService.activate(id);
     }
 
+    @PostMapping("/{id}/lock")
+    public MonthDto lock(@PathVariable Long id) {
+        return monthService.lock(id);
+    }
+
     // ---- nested resource endpoints --------------------------------------
 
     @GetMapping("/{id}/balances")
@@ -101,5 +110,10 @@ public class MonthController {
             @PathVariable Long id,
             @RequestBody @Valid InvestmentSnapshotUpdateRequest body) {
         return investmentService.bulkUpsertSnapshots(id, body);
+    }
+
+    @GetMapping("/{id}/emi-installments")
+    public List<EmiInstallmentDto> listEmiInstallments(@PathVariable Long id) {
+        return emiService.listInstallmentsForMonth(id);
     }
 }

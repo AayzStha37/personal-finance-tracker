@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, HttpError } from "../api/client";
-import type { BalanceUpdate, MonthSummaryDto } from "../api/types";
-import { Badge, Button, Card, Input, StatusPill } from "../components/ui";
+import type { BalanceUpdate, EmiInstallmentDto, MonthSummaryDto } from "../api/types";
+import { Badge, Button, Card, Input, Modal, StatusPill } from "../components/ui";
 import { formatMoney, fromMinor, monthLabel, toMinor } from "../lib/money";
 import { useApp } from "../state/AppContext";
 
@@ -13,18 +13,24 @@ export default function MonthDetailPage() {
   const { currencies } = app;
 
   const [summary, setSummary] = useState<MonthSummaryDto | null>(null);
+  const [installments, setInstallments] = useState<EmiInstallmentDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingClose, setEditingClose] = useState(false);
   const [closing, setClosing] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
+  const [confirmLock, setConfirmLock] = useState(false);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const s = await api.getMonthSummary(monthId);
+      const [s, inst] = await Promise.all([
+        api.getMonthSummary(monthId),
+        api.listMonthEmiInstallments(monthId),
+      ]);
       setSummary(s);
+      setInstallments(inst);
       const draft: Record<number, string> = {};
       s.balances.forEach((b) => {
         draft[b.accountId] = fromMinor(b.closingAmount, b.currency, currencies?.currencies);
@@ -78,6 +84,33 @@ export default function MonthDetailPage() {
     }
   }
 
+  async function lockMonth() {
+    if (!summary) return;
+    setBusy(true);
+    try {
+      await api.lockMonth(summary.month.id);
+      setConfirmLock(false);
+      await load();
+      await app.refresh();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function skipInstallment(instId: number) {
+    setBusy(true);
+    try {
+      await api.skipEmiInstallment(instId);
+      await load();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <div className="text-slate-500 text-sm">Loading…</div>;
   if (error) {
     return (
@@ -116,8 +149,38 @@ export default function MonthDetailPage() {
               Activate
             </Button>
           )}
+          {summary.month.status === "ACTIVE" && (
+            <Button
+              variant="danger"
+              onClick={() => setConfirmLock(true)}
+              disabled={busy || !summary.integrity.ok}
+            >
+              Lock month
+            </Button>
+          )}
         </div>
       </header>
+
+      <Modal
+        open={confirmLock}
+        onClose={() => setConfirmLock(false)}
+        title="Lock this month?"
+        size="sm"
+      >
+        <p className="text-sm text-slate-700">
+          Locking finalises {monthLabel(summary.month.year, summary.month.month)}. Past months
+          cannot be edited once locked — balances, budgets, investments and EMI installments for
+          this month will all become read-only.
+        </p>
+        <div className="flex justify-end gap-2 mt-5">
+          <Button variant="ghost" onClick={() => setConfirmLock(false)} disabled={busy}>
+            Cancel
+          </Button>
+          <Button variant="danger" onClick={lockMonth} disabled={busy}>
+            {busy ? "Locking…" : "Lock month"}
+          </Button>
+        </div>
+      </Modal>
 
       <Card
         title="Balances"
@@ -259,6 +322,61 @@ export default function MonthDetailPage() {
           )}
         </Card>
       </div>
+
+      <Card title="EMIs due this month" subtitle="Installments scheduled for this month">
+        {installments.length === 0 ? (
+          <p className="text-sm text-slate-500">No EMI installments due this month.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-1.5">Plan</th>
+                <th className="text-left">Seq</th>
+                <th className="text-right">Amount</th>
+                <th className="text-center">Status</th>
+                <th className="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {installments.map((i) => (
+                <tr key={i.id} className="border-b border-slate-100">
+                  <td className="py-1.5 text-slate-800">{i.planLabel ?? `Plan #${i.planId}`}</td>
+                  <td className="py-1.5 text-slate-600">
+                    {i.seqNo}/{i.totalInstallments}
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {formatMoney(i.amount, i.currency, currencies?.currencies)}
+                  </td>
+                  <td className="py-1.5 text-center">
+                    <Badge
+                      variant={
+                        i.status === "PAID"
+                          ? "success"
+                          : i.status === "SKIPPED"
+                            ? "warn"
+                            : "info"
+                      }
+                    >
+                      {i.status}
+                    </Badge>
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {!locked && i.status === "PROJECTED" && (
+                      <Button
+                        variant="ghost"
+                        onClick={() => skipInstallment(i.id)}
+                        disabled={busy}
+                      >
+                        Skip
+                      </Button>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
 
       <Card title="Integrity comparisons" subtitle="Per-account prev.closing vs. curr.opening">
         <table className="w-full text-sm">

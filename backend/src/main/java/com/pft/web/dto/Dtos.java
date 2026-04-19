@@ -1,6 +1,7 @@
 package com.pft.web.dto;
 
 import com.pft.domain.AccountKind;
+import com.pft.domain.InstallmentStatus;
 import com.pft.domain.MonthStatus;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.*;
@@ -159,6 +160,42 @@ public final class Dtos {
             @NotBlank String toCurrency,
             @NotNull @Positive BigDecimal rate,
             @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String effectiveMonth) {
+    }
+
+    // ---- EMI plans & installments ---------------------------------------
+
+    public record EmiPlanDto(
+            Long id, String label,
+            long principal, long installmentAmount, int totalInstallments,
+            Long startMonthId, Long accountId, Long categoryId,
+            String currency, boolean active,
+            List<EmiInstallmentDto> installments) {
+    }
+
+    public record EmiPlanRequest(
+            @NotBlank String label,
+            @NotNull @PositiveOrZero Long principal,
+            @NotNull @PositiveOrZero Long installmentAmount,
+            @NotNull @Min(1) @Max(600) Integer totalInstallments,
+            @NotNull @Min(1970) @Max(9999) Integer startYear,
+            @NotNull @Min(1) @Max(12) Integer startMonth,
+            @NotNull Long accountId,
+            @NotNull Long categoryId,
+            @NotBlank String currency) {
+    }
+
+    public record EmiInstallmentDto(
+            Long id, Long planId, String planLabel,
+            int seqNo, int totalInstallments,
+            Long dueMonthId, Integer dueYear, Integer dueMonth,
+            long amount, String currency,
+            InstallmentStatus status, Long expenseEntryId) {
+    }
+
+    public record ExpenseEntryDto(
+            Long id, Long monthId, Long categoryId, Long accountId,
+            String description, long amount, String currency,
+            String txDate, Long emiInstallmentId) {
     }
 
     // ---- Errors ----------------------------------------------------------

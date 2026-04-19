@@ -151,3 +151,48 @@ export interface ApiError {
   message: string;
   details: string[] | null;
 }
+
+// ---- EMI --------------------------------------------------------------
+
+export type InstallmentStatus = "PROJECTED" | "PAID" | "SKIPPED";
+
+export interface EmiInstallmentDto {
+  id: number;
+  planId: number;
+  planLabel: string | null;
+  seqNo: number;
+  totalInstallments: number;
+  dueMonthId: number;
+  dueYear: number | null;
+  dueMonth: number | null;
+  amount: number;
+  currency: string | null;
+  status: InstallmentStatus;
+  expenseEntryId: number | null;
+}
+
+export interface EmiPlanDto {
+  id: number;
+  label: string;
+  principal: number;
+  installmentAmount: number;
+  totalInstallments: number;
+  startMonthId: number;
+  accountId: number;
+  categoryId: number;
+  currency: string;
+  active: boolean;
+  installments: EmiInstallmentDto[];
+}
+
+export interface EmiPlanRequest {
+  label: string;
+  principal: number;
+  installmentAmount: number;
+  totalInstallments: number;
+  startYear: number;
+  startMonth: number;
+  accountId: number;
+  categoryId: number;
+  currency: string;
+}
