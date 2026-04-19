@@ -196,3 +196,50 @@ export interface EmiPlanRequest {
   categoryId: number;
   currency: string;
 }
+
+// ---- Expense entries -------------------------------------------------
+
+export interface ExpenseEntryDto {
+  id: number;
+  monthId: number;
+  categoryId: number;
+  accountId: number;
+  description: string;
+  amount: number;
+  currency: string;
+  txDate: string;
+  emiInstallmentId: number | null;
+}
+
+export interface ExpenseEntryRequest {
+  categoryId: number;
+  accountId: number;
+  description: string;
+  amount: number;
+  currency: string;
+  txDate: string;
+}
+
+// ---- Income entries --------------------------------------------------
+
+export interface IncomeEntryDto {
+  id: number;
+  monthId: number;
+  accountId: number | null;
+  source: string;
+  grossAmount: number;
+  netAmount: number;
+  currency: string;
+  receivedDate: string;
+  weekOfMonth: number | null;
+}
+
+export interface IncomeEntryRequest {
+  accountId?: number | null;
+  source: string;
+  grossAmount: number;
+  netAmount: number;
+  currency: string;
+  receivedDate: string;
+  weekOfMonth?: number | null;
+}

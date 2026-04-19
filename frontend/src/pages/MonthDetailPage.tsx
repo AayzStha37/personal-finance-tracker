@@ -1,36 +1,64 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, HttpError } from "../api/client";
-import type { BalanceUpdate, EmiInstallmentDto, MonthSummaryDto } from "../api/types";
-import { Badge, Button, Card, Input, Modal, StatusPill } from "../components/ui";
+import type {
+  BalanceUpdate,
+  EmiInstallmentDto,
+  ExpenseEntryDto,
+  ExpenseEntryRequest,
+  IncomeEntryDto,
+  IncomeEntryRequest,
+  MonthSummaryDto,
+} from "../api/types";
+import { Badge, Button, Card, Input, Label, Modal, Select, StatusPill } from "../components/ui";
 import { formatMoney, fromMinor, monthLabel, toMinor } from "../lib/money";
 import { useApp } from "../state/AppContext";
+
+const INCOME_SOURCES = [
+  "Salary",
+  "MOMO Business",
+  "Side Gigs",
+  "Bonuses",
+  "Interest",
+  "Dividends",
+  "Refund",
+  "Gift",
+  "Other",
+];
 
 export default function MonthDetailPage() {
   const { id } = useParams<{ id: string }>();
   const monthId = Number(id);
   const app = useApp();
-  const { currencies } = app;
+  const { currencies, accounts, categories } = app;
 
   const [summary, setSummary] = useState<MonthSummaryDto | null>(null);
   const [installments, setInstallments] = useState<EmiInstallmentDto[]>([]);
+  const [expenses, setExpenses] = useState<ExpenseEntryDto[]>([]);
+  const [incomes, setIncomes] = useState<IncomeEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editingClose, setEditingClose] = useState(false);
   const [closing, setClosing] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [confirmLock, setConfirmLock] = useState(false);
+  const [editingExpense, setEditingExpense] = useState<ExpenseEntryDto | "new" | null>(null);
+  const [editingIncome, setEditingIncome] = useState<IncomeEntryDto | "new" | null>(null);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [s, inst] = await Promise.all([
+      const [s, inst, xs, ins] = await Promise.all([
         api.getMonthSummary(monthId),
         api.listMonthEmiInstallments(monthId),
+        api.listExpenses(monthId),
+        api.listIncomes(monthId),
       ]);
       setSummary(s);
       setInstallments(inst);
+      setExpenses(xs);
+      setIncomes(ins);
       const draft: Record<number, string> = {};
       s.balances.forEach((b) => {
         draft[b.accountId] = fromMinor(b.closingAmount, b.currency, currencies?.currencies);
@@ -111,6 +139,32 @@ export default function MonthDetailPage() {
     }
   }
 
+  async function deleteExpense(expId: number) {
+    if (!confirm("Delete this expense?")) return;
+    setBusy(true);
+    try {
+      await api.deleteExpense(expId);
+      await load();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteIncome(incId: number) {
+    if (!confirm("Delete this income entry?")) return;
+    setBusy(true);
+    try {
+      await api.deleteIncome(incId);
+      await load();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   if (loading) return <div className="text-slate-500 text-sm">Loading…</div>;
   if (error) {
     return (
@@ -122,6 +176,10 @@ export default function MonthDetailPage() {
   if (!summary) return null;
 
   const locked = summary.month.status === "LOCKED";
+  const categoryLabel = (cid: number) =>
+    categories.find((c) => c.id === cid)?.label ?? `Category #${cid}`;
+  const accountName = (aid: number | null) =>
+    aid == null ? "—" : accounts.find((a) => a.id === aid)?.name ?? `Account #${aid}`;
 
   return (
     <div className="space-y-6">
@@ -169,8 +227,8 @@ export default function MonthDetailPage() {
       >
         <p className="text-sm text-slate-700">
           Locking finalises {monthLabel(summary.month.year, summary.month.month)}. Past months
-          cannot be edited once locked — balances, budgets, investments and EMI installments for
-          this month will all become read-only.
+          cannot be edited once locked — balances, budgets, investments, expenses, income and EMI
+          installments for this month will all become read-only.
         </p>
         <div className="flex justify-end gap-2 mt-5">
           <Button variant="ghost" onClick={() => setConfirmLock(false)} disabled={busy}>
@@ -323,6 +381,137 @@ export default function MonthDetailPage() {
         </Card>
       </div>
 
+      <Card
+        title="Expenses"
+        subtitle="Manual entries (EMI-projected rows are read-only)"
+        actions={
+          !locked && (
+            <Button variant="secondary" onClick={() => setEditingExpense("new")}>
+              + Add expense
+            </Button>
+          )
+        }
+      >
+        {expenses.length === 0 ? (
+          <p className="text-sm text-slate-500">No expenses logged this month.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-1.5">Date</th>
+                <th className="text-left">Description</th>
+                <th className="text-left">Category</th>
+                <th className="text-left">Account</th>
+                <th className="text-right">Amount</th>
+                <th className="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {expenses.map((x) => (
+                <tr key={x.id} className="border-b border-slate-100">
+                  <td className="py-1.5 text-slate-700">{x.txDate}</td>
+                  <td className="py-1.5 text-slate-800">
+                    {x.description}
+                    {x.emiInstallmentId != null && (
+                      <Badge variant="info">
+                        <span className="ml-2">EMI</span>
+                      </Badge>
+                    )}
+                  </td>
+                  <td className="py-1.5 text-slate-600">{categoryLabel(x.categoryId)}</td>
+                  <td className="py-1.5 text-slate-600">{accountName(x.accountId)}</td>
+                  <td className="py-1.5 text-right">
+                    {formatMoney(x.amount, x.currency, currencies?.currencies)}
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {!locked && x.emiInstallmentId == null && (
+                      <>
+                        <button
+                          className="text-slate-700 hover:text-slate-900 text-sm font-medium mr-3"
+                          onClick={() => setEditingExpense(x)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="text-rose-600 hover:text-rose-800 text-sm font-medium"
+                          onClick={() => deleteExpense(x.id)}
+                          disabled={busy}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
+      <Card
+        title="Income"
+        subtitle="Money received this month"
+        actions={
+          !locked && (
+            <Button variant="secondary" onClick={() => setEditingIncome("new")}>
+              + Add income
+            </Button>
+          )
+        }
+      >
+        {incomes.length === 0 ? (
+          <p className="text-sm text-slate-500">No income logged this month.</p>
+        ) : (
+          <table className="w-full text-sm">
+            <thead className="text-xs uppercase text-slate-500">
+              <tr className="border-b border-slate-200">
+                <th className="text-left py-1.5">Date</th>
+                <th className="text-left">Source</th>
+                <th className="text-left">Account</th>
+                <th className="text-right">Gross</th>
+                <th className="text-right">Net</th>
+                <th className="text-right">Action</th>
+              </tr>
+            </thead>
+            <tbody>
+              {incomes.map((i) => (
+                <tr key={i.id} className="border-b border-slate-100">
+                  <td className="py-1.5 text-slate-700">{i.receivedDate}</td>
+                  <td className="py-1.5 text-slate-800">{i.source}</td>
+                  <td className="py-1.5 text-slate-600">{accountName(i.accountId)}</td>
+                  <td className="py-1.5 text-right text-slate-600">
+                    {formatMoney(i.grossAmount, i.currency, currencies?.currencies)}
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {formatMoney(i.netAmount, i.currency, currencies?.currencies)}
+                  </td>
+                  <td className="py-1.5 text-right">
+                    {!locked && (
+                      <>
+                        <button
+                          className="text-slate-700 hover:text-slate-900 text-sm font-medium mr-3"
+                          onClick={() => setEditingIncome(i)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          className="text-rose-600 hover:text-rose-800 text-sm font-medium"
+                          onClick={() => deleteIncome(i.id)}
+                          disabled={busy}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </Card>
+
       <Card title="EMIs due this month" subtitle="Installments scheduled for this month">
         {installments.length === 0 ? (
           <p className="text-sm text-slate-500">No EMI installments due this month.</p>
@@ -414,6 +603,314 @@ export default function MonthDetailPage() {
           </tbody>
         </table>
       </Card>
+
+      {editingExpense && (
+        <ExpenseEditor
+          initial={editingExpense === "new" ? null : editingExpense}
+          monthId={monthId}
+          onClose={() => setEditingExpense(null)}
+          onSaved={async () => {
+            setEditingExpense(null);
+            await load();
+          }}
+        />
+      )}
+
+      {editingIncome && (
+        <IncomeEditor
+          initial={editingIncome === "new" ? null : editingIncome}
+          monthId={monthId}
+          onClose={() => setEditingIncome(null)}
+          onSaved={async () => {
+            setEditingIncome(null);
+            await load();
+          }}
+        />
+      )}
     </div>
+  );
+}
+
+function ExpenseEditor({
+  initial,
+  monthId,
+  onClose,
+  onSaved,
+}: {
+  initial: ExpenseEntryDto | null;
+  monthId: number;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const { accounts, categories, currencies } = useApp();
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultAccount = accounts[0];
+  const [categoryId, setCategoryId] = useState<number>(
+    initial?.categoryId ?? categories[0]?.id ?? 0,
+  );
+  const [accountId, setAccountId] = useState<number>(
+    initial?.accountId ?? defaultAccount?.id ?? 0,
+  );
+  const [description, setDescription] = useState(initial?.description ?? "");
+  const [currency, setCurrency] = useState(
+    initial?.currency ?? defaultAccount?.currency ?? currencies?.currencies[0]?.code ?? "CAD",
+  );
+  const [amount, setAmount] = useState(
+    initial ? fromMinor(initial.amount, initial.currency, currencies?.currencies) : "",
+  );
+  const [txDate, setTxDate] = useState(initial?.txDate ?? today);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!description.trim() || !amount) {
+      setError("Description and amount are required.");
+      return;
+    }
+    const amountMinor = toMinor(amount, currency, currencies?.currencies);
+    if (amountMinor == null) {
+      setError("Amount must be a valid number.");
+      return;
+    }
+    const body: ExpenseEntryRequest = {
+      categoryId,
+      accountId,
+      description: description.trim(),
+      amount: amountMinor,
+      currency,
+      txDate,
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      if (initial) {
+        await api.updateExpense(initial.id, body);
+      } else {
+        await api.createExpense(monthId, body);
+      }
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={initial ? "Edit expense" : "New expense"} size="md">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <Label>Description</Label>
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} />
+        </div>
+        <div>
+          <Label>Amount</Label>
+          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
+        </div>
+        <div>
+          <Label>Currency</Label>
+          <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {(currencies?.currencies ?? []).map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Category</Label>
+          <Select value={categoryId} onChange={(e) => setCategoryId(Number(e.target.value))}>
+            {categories.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.label}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Account</Label>
+          <Select value={accountId} onChange={(e) => setAccountId(Number(e.target.value))}>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.currency})
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div className="col-span-2">
+          <Label>Transaction date</Label>
+          <Input type="date" value={txDate} onChange={(e) => setTxDate(e.target.value)} />
+        </div>
+      </div>
+      {error && (
+        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-sm px-3 py-2">
+          {error}
+        </div>
+      )}
+      <div className="flex justify-end gap-2 mt-5">
+        <Button variant="ghost" onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button onClick={submit} disabled={busy}>
+          {busy ? "Saving…" : initial ? "Update" : "Create"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+function IncomeEditor({
+  initial,
+  monthId,
+  onClose,
+  onSaved,
+}: {
+  initial: IncomeEntryDto | null;
+  monthId: number;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const { accounts, currencies } = useApp();
+  const today = new Date().toISOString().slice(0, 10);
+  const defaultAccount = accounts[0];
+  const [source, setSource] = useState(initial?.source ?? INCOME_SOURCES[0]);
+  const [accountId, setAccountId] = useState<number | null>(
+    initial?.accountId ?? defaultAccount?.id ?? null,
+  );
+  const [currency, setCurrency] = useState(
+    initial?.currency ?? defaultAccount?.currency ?? currencies?.currencies[0]?.code ?? "CAD",
+  );
+  const [gross, setGross] = useState(
+    initial ? fromMinor(initial.grossAmount, initial.currency, currencies?.currencies) : "",
+  );
+  const [net, setNet] = useState(
+    initial ? fromMinor(initial.netAmount, initial.currency, currencies?.currencies) : "",
+  );
+  const [receivedDate, setReceivedDate] = useState(initial?.receivedDate ?? today);
+  const [weekOfMonth, setWeekOfMonth] = useState<string>(
+    initial?.weekOfMonth != null ? String(initial.weekOfMonth) : "",
+  );
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!source.trim() || !gross || !net) {
+      setError("Source, gross and net amounts are required.");
+      return;
+    }
+    const grossMinor = toMinor(gross, currency, currencies?.currencies);
+    const netMinor = toMinor(net, currency, currencies?.currencies);
+    if (grossMinor == null || netMinor == null) {
+      setError("Amounts must be valid numbers.");
+      return;
+    }
+    const body: IncomeEntryRequest = {
+      accountId: accountId ?? null,
+      source: source.trim(),
+      grossAmount: grossMinor,
+      netAmount: netMinor,
+      currency,
+      receivedDate,
+      weekOfMonth: weekOfMonth ? Number(weekOfMonth) : null,
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      if (initial) {
+        await api.updateIncome(initial.id, body);
+      } else {
+        await api.createIncome(monthId, body);
+      }
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title={initial ? "Edit income" : "New income"} size="md">
+      <div className="grid grid-cols-2 gap-3">
+        <div className="col-span-2">
+          <Label>Source</Label>
+          <Input
+            list="income-source-options"
+            value={source}
+            onChange={(e) => setSource(e.target.value)}
+            placeholder="Pick a preset or type your own"
+          />
+          <datalist id="income-source-options">
+            {INCOME_SOURCES.map((s) => (
+              <option key={s} value={s} />
+            ))}
+          </datalist>
+        </div>
+        <div>
+          <Label>Gross amount</Label>
+          <Input inputMode="decimal" value={gross} onChange={(e) => setGross(e.target.value)} />
+        </div>
+        <div>
+          <Label>Net amount</Label>
+          <Input inputMode="decimal" value={net} onChange={(e) => setNet(e.target.value)} />
+        </div>
+        <div>
+          <Label>Currency</Label>
+          <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+            {(currencies?.currencies ?? []).map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code}
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Deposit account</Label>
+          <Select
+            value={accountId ?? ""}
+            onChange={(e) =>
+              setAccountId(e.target.value === "" ? null : Number(e.target.value))
+            }
+          >
+            <option value="">— none —</option>
+            {accounts.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name} ({a.currency})
+              </option>
+            ))}
+          </Select>
+        </div>
+        <div>
+          <Label>Received date</Label>
+          <Input
+            type="date"
+            value={receivedDate}
+            onChange={(e) => setReceivedDate(e.target.value)}
+          />
+        </div>
+        <div>
+          <Label>Week of month (optional)</Label>
+          <Input
+            inputMode="numeric"
+            value={weekOfMonth}
+            onChange={(e) => setWeekOfMonth(e.target.value)}
+            placeholder="1–6"
+          />
+        </div>
+      </div>
+      {error && (
+        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-sm px-3 py-2">
+          {error}
+        </div>
+      )}
+      <div className="flex justify-end gap-2 mt-5">
+        <Button variant="ghost" onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button onClick={submit} disabled={busy}>
+          {busy ? "Saving…" : initial ? "Update" : "Create"}
+        </Button>
+      </div>
+    </Modal>
   );
 }

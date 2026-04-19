@@ -198,6 +198,33 @@ public final class Dtos {
             String txDate, Long emiInstallmentId) {
     }
 
+    public record ExpenseEntryRequest(
+            @NotNull Long categoryId,
+            @NotNull Long accountId,
+            @NotBlank String description,
+            @NotNull @PositiveOrZero Long amount,
+            @NotBlank String currency,
+            @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String txDate) {
+    }
+
+    // ---- Income ---------------------------------------------------------
+
+    public record IncomeEntryDto(
+            Long id, Long monthId, Long accountId, String source,
+            long grossAmount, long netAmount, String currency,
+            String receivedDate, Integer weekOfMonth) {
+    }
+
+    public record IncomeEntryRequest(
+            Long accountId,
+            @NotBlank String source,
+            @NotNull @PositiveOrZero Long grossAmount,
+            @NotNull @PositiveOrZero Long netAmount,
+            @NotBlank String currency,
+            @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String receivedDate,
+            @Min(1) @Max(6) Integer weekOfMonth) {
+    }
+
     // ---- Errors ----------------------------------------------------------
 
     public record ApiError(int status, String error, String message, List<String> details) {
