@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(code-review-graph --help)",
+      "Bash(npm list:*)",
+      "Bash(pip show:*)",
+      "Bash(pipx list:*)",
+      "Bash(python -m code_review_graph --help)",
+      "Bash(python -c \"import code_review_graph; print\\(code_review_graph.__file__\\)\")",
+      "Bash(python -m code_review_graph build)",
+      "Bash(python -m code_review_graph status)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "code-review-graph"
+  ]
+}
