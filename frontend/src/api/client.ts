@@ -12,6 +12,10 @@ import type {
   EmiInstallmentDto,
   EmiPlanDto,
   EmiPlanRequest,
+  ExpenseEntryDto,
+  ExpenseEntryRequest,
+  IncomeEntryDto,
+  IncomeEntryRequest,
   IntegrityCheckDto,
   InvestmentDto,
   InvestmentRequest,
@@ -166,4 +170,36 @@ export const api = {
     request<EmiPlanDto>(`/emi/plans/${id}/cancel`, { method: "POST" }),
   skipEmiInstallment: (id: number) =>
     request<EmiInstallmentDto>(`/emi/installments/${id}/skip`, { method: "POST" }),
+
+  // Expenses
+  listExpenses: (monthId: number) =>
+    request<ExpenseEntryDto[]>(`/months/${monthId}/expenses`),
+  createExpense: (monthId: number, req: ExpenseEntryRequest) =>
+    request<ExpenseEntryDto>(`/months/${monthId}/expenses`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  updateExpense: (id: number, req: ExpenseEntryRequest) =>
+    request<ExpenseEntryDto>(`/expenses/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(req),
+    }),
+  deleteExpense: (id: number) =>
+    request<void>(`/expenses/${id}`, { method: "DELETE" }),
+
+  // Incomes
+  listIncomes: (monthId: number) =>
+    request<IncomeEntryDto[]>(`/months/${monthId}/incomes`),
+  createIncome: (monthId: number, req: IncomeEntryRequest) =>
+    request<IncomeEntryDto>(`/months/${monthId}/incomes`, {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  updateIncome: (id: number, req: IncomeEntryRequest) =>
+    request<IncomeEntryDto>(`/incomes/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(req),
+    }),
+  deleteIncome: (id: number) =>
+    request<void>(`/incomes/${id}`, { method: "DELETE" }),
 };

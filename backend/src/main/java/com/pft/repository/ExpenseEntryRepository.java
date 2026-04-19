@@ -8,4 +8,6 @@ import java.util.List;
 public interface ExpenseEntryRepository extends JpaRepository<ExpenseEntry, Long> {
 
     List<ExpenseEntry> findAllByMonthId(Long monthId);
+
+    List<ExpenseEntry> findAllByMonthIdOrderByTxDateAscIdAsc(Long monthId);
 }
