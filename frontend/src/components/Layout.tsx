@@ -22,6 +22,7 @@ export default function Layout() {
               { to: "/accounts", label: "Accounts" },
               { to: "/investments", label: "Investments" },
               { to: "/emi", label: "EMIs" },
+              { to: "/fx", label: "FX" },
             ].map((item) => (
               <NavLink
                 key={item.to}
