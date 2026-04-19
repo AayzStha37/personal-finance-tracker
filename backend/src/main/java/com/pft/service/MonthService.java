@@ -21,12 +21,8 @@ public class MonthService {
     private final MonthlyBalanceSnapshotRepository balanceSnapshots;
     private final BudgetCategoryRepository categories;
     private final MonthlyBudgetRepository budgets;
-    private final InvestmentRepository investments;
-    private final MonthlyInvestmentSnapshotRepository investmentSnapshots;
-
     private final BalanceService balanceService;
     private final BudgetService budgetService;
-    private final InvestmentService investmentService;
     private final EmiService emiService;
 
     public MonthService(MonthRepository months,
@@ -34,22 +30,16 @@ public class MonthService {
                         MonthlyBalanceSnapshotRepository balanceSnapshots,
                         BudgetCategoryRepository categories,
                         MonthlyBudgetRepository budgets,
-                        InvestmentRepository investments,
-                        MonthlyInvestmentSnapshotRepository investmentSnapshots,
                         BalanceService balanceService,
                         BudgetService budgetService,
-                        InvestmentService investmentService,
                         EmiService emiService) {
         this.months = months;
         this.accounts = accounts;
         this.balanceSnapshots = balanceSnapshots;
         this.categories = categories;
         this.budgets = budgets;
-        this.investments = investments;
-        this.investmentSnapshots = investmentSnapshots;
         this.balanceService = balanceService;
         this.budgetService = budgetService;
-        this.investmentService = investmentService;
         this.emiService = emiService;
     }
 
@@ -97,11 +87,9 @@ public class MonthService {
 
         boolean rollBalances = req.rolloverBalances() == null || req.rolloverBalances();
         boolean rollBudgets = req.rolloverBudgets() == null || req.rolloverBudgets();
-        boolean rollInvestments = req.rolloverInvestments() == null || req.rolloverInvestments();
 
         if (rollBalances) seedBalances(created, previous);
         if (rollBudgets) seedBudgets(created, previous);
-        if (rollInvestments) seedInvestmentSnapshots(created, previous);
 
         // Project any EMI installments that come due in this month into
         // concrete expense entries.
@@ -145,21 +133,6 @@ public class MonthService {
                     .currency(prev.getCurrency())
                     .build();
             budgets.save(copy);
-        }
-    }
-
-    private void seedInvestmentSnapshots(Month current, Optional<Month> previous) {
-        if (previous.isEmpty()) return;
-        for (MonthlyInvestmentSnapshot prev :
-                investmentSnapshots.findAllByMonthId(previous.get().getId())) {
-            MonthlyInvestmentSnapshot copy = MonthlyInvestmentSnapshot.builder()
-                    .monthId(current.getId())
-                    .investmentId(prev.getInvestmentId())
-                    .shares(prev.getShares())
-                    .amountInvested(prev.getAmountInvested())
-                    .marketValue(prev.getMarketValue())
-                    .build();
-            investmentSnapshots.save(copy);
         }
     }
 
@@ -254,7 +227,6 @@ public class MonthService {
                 previous.map(Month::getId).orElse(null),
                 balanceService.list(id),
                 budgetService.list(id),
-                investmentService.listSnapshots(id),
                 integritySnapshot(m, previous));
     }
 

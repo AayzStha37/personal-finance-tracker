@@ -5,14 +5,12 @@ import type {
   AccountDto,
   BudgetCategoryDto,
   CurrenciesResponse,
-  InvestmentDto,
   MonthDto,
 } from "../api/types";
 
 interface AppState {
   currencies: CurrenciesResponse | null;
   accounts: AccountDto[];
-  investments: InvestmentDto[];
   categories: BudgetCategoryDto[];
   months: MonthDto[];
   loading: boolean;
@@ -25,7 +23,6 @@ const AppContext = createContext<AppState | null>(null);
 export function AppProvider({ children }: { children: ReactNode }) {
   const [currencies, setCurrencies] = useState<CurrenciesResponse | null>(null);
   const [accounts, setAccounts] = useState<AccountDto[]>([]);
-  const [investments, setInvestments] = useState<InvestmentDto[]>([]);
   const [categories, setCategories] = useState<BudgetCategoryDto[]>([]);
   const [months, setMonths] = useState<MonthDto[]>([]);
   const [loading, setLoading] = useState(true);
@@ -35,16 +32,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     setError(null);
     try {
-      const [c, a, inv, cat, m] = await Promise.all([
+      const [c, a, cat, m] = await Promise.all([
         api.listCurrencies(),
         api.listAccounts(),
-        api.listInvestments(),
         api.listBudgetCategories(),
         api.listMonths(),
       ]);
       setCurrencies(c);
       setAccounts(a);
-      setInvestments(inv);
       setCategories(cat);
       setMonths(m);
     } catch (e) {
@@ -60,7 +55,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
 
   return (
     <AppContext.Provider
-      value={{ currencies, accounts, investments, categories, months, loading, error, refresh }}
+      value={{ currencies, accounts, categories, months, loading, error, refresh }}
     >
       {children}
     </AppContext.Provider>

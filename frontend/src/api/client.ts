@@ -21,8 +21,8 @@ import type {
   IntegrityCheckDto,
   InvestmentDto,
   InvestmentRequest,
-  InvestmentSnapshotDto,
-  InvestmentSnapshotUpdate,
+  ShareLotDto,
+  ShareLotRequest,
   MonthDto,
   MonthSummaryDto,
 } from "./types";
@@ -115,14 +115,16 @@ export const api = {
       body: JSON.stringify({ budgets }),
     }),
 
-  // Investments
-  listInvestmentSnapshots: (monthId: number) =>
-    request<InvestmentSnapshotDto[]>(`/months/${monthId}/investments`),
-  updateInvestmentSnapshots: (monthId: number, snapshots: InvestmentSnapshotUpdate[]) =>
-    request<InvestmentSnapshotDto[]>(`/months/${monthId}/investments`, {
-      method: "PUT",
-      body: JSON.stringify({ snapshots }),
+  // Share lots (monthly)
+  listShareLots: (monthId: number) =>
+    request<ShareLotDto[]>(`/months/${monthId}/share-lots`),
+  createShareLot: (monthId: number, req: ShareLotRequest) =>
+    request<ShareLotDto>(`/months/${monthId}/share-lots`, {
+      method: "POST",
+      body: JSON.stringify(req),
     }),
+  deleteShareLot: (lotId: number) =>
+    request<void>(`/investments/lots/${lotId}`, { method: "DELETE" }),
 
   // Budget categories
   listBudgetCategories: () => request<BudgetCategoryDto[]>("/budget-categories"),
@@ -156,6 +158,8 @@ export const api = {
     }),
   deleteInvestment: (id: number) =>
     request<void>(`/investments/${id}`, { method: "DELETE" }),
+  listInvestmentLots: (investmentId: number) =>
+    request<ShareLotDto[]>(`/investments/${investmentId}/lots`),
 
   // Currencies
   listCurrencies: () => request<CurrenciesResponse>("/currencies"),

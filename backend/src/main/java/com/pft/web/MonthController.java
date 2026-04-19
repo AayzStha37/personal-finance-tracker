@@ -100,16 +100,15 @@ public class MonthController {
         return budgetService.bulkUpdate(id, body);
     }
 
-    @GetMapping("/{id}/investments")
-    public List<InvestmentSnapshotDto> listInvestmentSnapshots(@PathVariable Long id) {
-        return investmentService.listSnapshots(id);
+    @GetMapping("/{id}/share-lots")
+    public List<ShareLotDto> listShareLots(@PathVariable Long id) {
+        return investmentService.listLotsByMonth(id);
     }
 
-    @PutMapping("/{id}/investments")
-    public List<InvestmentSnapshotDto> updateInvestmentSnapshots(
-            @PathVariable Long id,
-            @RequestBody @Valid InvestmentSnapshotUpdateRequest body) {
-        return investmentService.bulkUpsertSnapshots(id, body);
+    @PostMapping("/{id}/share-lots")
+    public ShareLotDto createShareLot(@PathVariable Long id,
+                                      @RequestBody @Valid ShareLotRequest body) {
+        return investmentService.createLot(id, body);
     }
 
     @GetMapping("/{id}/emi-installments")

@@ -19,7 +19,6 @@ export interface CreateMonthRequest {
   month: number;
   rolloverBalances?: boolean;
   rolloverBudgets?: boolean;
-  rolloverInvestments?: boolean;
 }
 
 export interface AccountBalanceComparison {
@@ -78,8 +77,6 @@ export interface InvestmentDto {
   ticker: string | null;
   type: string;
   currency: string;
-  accountId: number | null;
-  active: boolean;
 }
 
 export interface InvestmentRequest {
@@ -87,25 +84,22 @@ export interface InvestmentRequest {
   ticker?: string | null;
   type: string;
   currency: string;
-  accountId?: number | null;
-  active?: boolean;
 }
 
-export interface InvestmentSnapshotDto {
+export interface ShareLotDto {
+  id: number;
   investmentId: number;
-  investmentName: string;
-  currency: string;
-  shares: string | number | null;
-  amountInvested: number | null;
-  marketValue: number | null;
-  netChange: number | null;
+  monthId: number;
+  shares: number | string;
+  buyPricePerShare: number;
+  purchasedDate: string;
 }
 
-export interface InvestmentSnapshotUpdate {
+export interface ShareLotRequest {
   investmentId: number;
   shares: number | string;
-  amountInvested: number;
-  marketValue?: number | null;
+  buyPricePerShare: number;
+  purchasedDate: string;
 }
 
 export interface MonthSummaryDto {
@@ -113,7 +107,6 @@ export interface MonthSummaryDto {
   previousMonthId: number | null;
   balances: BalanceDto[];
   budgets: BudgetDto[];
-  investments: InvestmentSnapshotDto[];
   integrity: IntegrityCheckDto;
 }
 

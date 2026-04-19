@@ -3,16 +3,14 @@ import { api, HttpError } from "../../api/client";
 import type {
   BalanceUpdate,
   BudgetUpdate,
-  InvestmentSnapshotUpdate,
   MonthDto,
   MonthSummaryDto,
 } from "../../api/types";
 import { Button, Input, Label, Modal, Select } from "../../components/ui";
 import { useApp } from "../../state/AppContext";
 import { fromMinor, monthLabel, nextMonth, toMinor } from "../../lib/money";
-import IntegrityPanel from "./IntegrityPanel";
 
-type Step = 1 | 2 | 3 | 4 | 5;
+type Step = 1 | 2 | 3 | 4;
 
 interface Props {
   open: boolean;
@@ -21,7 +19,7 @@ interface Props {
 }
 
 export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
-  const { accounts, investments, categories, currencies, months } = useApp();
+  const { accounts, categories, currencies, months } = useApp();
   const baseCurrency = currencies?.base ?? "CAD";
 
   const suggested = useMemo(() => suggestNextMonth(months), [months]);
@@ -31,17 +29,12 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
   const [month, setMonth] = useState(suggested.month);
   const [rolloverBalances, setRolloverBalances] = useState(true);
   const [rolloverBudgets, setRolloverBudgets] = useState(true);
-  const [rolloverInvestments, setRolloverInvestments] = useState(true);
   const [summary, setSummary] = useState<MonthSummaryDto | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Draft edits keyed by entity id, as strings (major units for display).
   const [balanceDraft, setBalanceDraft] = useState<Record<number, string>>({});
   const [budgetDraft, setBudgetDraft] = useState<Record<number, string>>({});
-  const [investmentDraft, setInvestmentDraft] = useState<
-    Record<number, { shares: string; invested: string; market: string }>
-  >({});
 
   useEffect(() => {
     if (!open) {
@@ -52,10 +45,8 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
       setMonth(suggested.month);
       setRolloverBalances(true);
       setRolloverBudgets(true);
-      setRolloverInvestments(true);
       setBalanceDraft({});
       setBudgetDraft({});
-      setInvestmentDraft({});
     }
   }, [open, suggested.year, suggested.month]);
 
@@ -72,16 +63,6 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
       bg[x.categoryId] = fromMinor(x.limitAmount, x.currency ?? baseCurrency, currencies?.currencies);
     });
     setBudgetDraft(bg);
-
-    const inv: Record<number, { shares: string; invested: string; market: string }> = {};
-    summary.investments.forEach((x) => {
-      inv[x.investmentId] = {
-        shares: x.shares != null ? String(x.shares) : "",
-        invested: fromMinor(x.amountInvested, x.currency, currencies?.currencies),
-        market: fromMinor(x.marketValue, x.currency, currencies?.currencies),
-      };
-    });
-    setInvestmentDraft(inv);
   }, [summary, baseCurrency, currencies]);
 
   async function createDraft() {
@@ -93,7 +74,6 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
         month,
         rolloverBalances,
         rolloverBudgets,
-        rolloverInvestments,
       });
       setSummary(s);
       setStep(2);
@@ -153,36 +133,6 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
     }
   }
 
-  async function saveInvestments() {
-    if (!summary) return;
-    setBusy(true);
-    setError(null);
-    try {
-      const updates: InvestmentSnapshotUpdate[] = [];
-      for (const [idStr, v] of Object.entries(investmentDraft)) {
-        const investmentId = Number(idStr);
-        const inv = investments.find((i) => i.id === investmentId);
-        if (!inv) continue;
-        const shares = v.shares === "" ? null : Number(v.shares);
-        const invested = toMinor(v.invested, inv.currency, currencies?.currencies);
-        const market =
-          v.market === "" ? null : toMinor(v.market, inv.currency, currencies?.currencies);
-        if (shares == null || !Number.isFinite(shares) || invested == null) continue;
-        updates.push({ investmentId, shares, amountInvested: invested, marketValue: market });
-      }
-      if (updates.length > 0) {
-        await api.updateInvestmentSnapshots(summary.month.id, updates);
-      }
-      const refreshed = await api.getMonthSummary(summary.month.id);
-      setSummary(refreshed);
-      setStep(5);
-    } catch (e) {
-      setError(readError(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
   async function activate() {
     if (!summary) return;
     setBusy(true);
@@ -200,8 +150,8 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
   }
 
   const title = summary
-    ? `New Month — ${monthLabel(summary.month.year, summary.month.month)} (Step ${step}/5)`
-    : `New Month — Step ${step}/5`;
+    ? `New Month — ${monthLabel(summary.month.year, summary.month.month)} (Step ${step}/4)`
+    : `New Month — Step ${step}/4`;
 
   return (
     <Modal open={open} onClose={onClose} title={title} size="lg">
@@ -223,8 +173,6 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
             setRolloverBalances={setRolloverBalances}
             rolloverBudgets={rolloverBudgets}
             setRolloverBudgets={setRolloverBudgets}
-            rolloverInvestments={rolloverInvestments}
-            setRolloverInvestments={setRolloverInvestments}
           />
         )}
 
@@ -248,15 +196,11 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
         )}
 
         {step === 4 && summary && (
-          <StepInvestments
-            summary={summary}
-            draft={investmentDraft}
-            setDraft={setInvestmentDraft}
-            currencies={currencies?.currencies ?? []}
-          />
+          <p className="text-sm text-slate-600">
+            Review your month setup. Click <strong>Activate month</strong> to start tracking, or
+            leave as DRAFT to continue editing later.
+          </p>
         )}
-
-        {step === 5 && summary && <IntegrityPanel summary={summary} />}
       </div>
 
       <footer className="mt-6 flex justify-between items-center pt-4 border-t border-slate-200">
@@ -290,21 +234,12 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
               {busy ? "Saving…" : "Save budgets"}
             </Button>
           )}
-          {step === 4 && (
-            <Button onClick={saveInvestments} disabled={busy}>
-              {busy ? "Saving…" : "Save investments"}
-            </Button>
-          )}
-          {step === 5 && summary && (
+          {step === 4 && summary && (
             <>
               <Button variant="secondary" onClick={onClose} disabled={busy}>
                 Leave as DRAFT
               </Button>
-              <Button
-                onClick={activate}
-                disabled={busy || !summary.integrity.ok}
-                title={!summary.integrity.ok ? "Integrity check must pass first" : undefined}
-              >
+              <Button onClick={activate} disabled={busy}>
                 {busy ? "Activating…" : "Activate month"}
               </Button>
             </>
@@ -316,7 +251,7 @@ export default function NewMonthWizard({ open, onClose, onCreated }: Props) {
 }
 
 function Stepper({ step }: { step: Step }) {
-  const labels = ["Period", "Balances", "Budgets", "Investments", "Review"];
+  const labels = ["Period", "Balances", "Budgets", "Review"];
   return (
     <ol className="flex items-center gap-2 text-xs">
       {labels.map((label, i) => {
@@ -356,8 +291,6 @@ function StepPeriod(props: {
   setRolloverBalances: (v: boolean) => void;
   rolloverBudgets: boolean;
   setRolloverBudgets: (v: boolean) => void;
-  rolloverInvestments: boolean;
-  setRolloverInvestments: (v: boolean) => void;
 }) {
   return (
     <div className="space-y-4">
@@ -395,20 +328,10 @@ function StepPeriod(props: {
         {[
           { label: "Opening balances (prev. closing → curr. opening)", key: "balances" as const },
           { label: "Budget limits", key: "budgets" as const },
-          { label: "Investment snapshots (shares, cost basis, market)", key: "investments" as const },
         ].map((opt) => {
-          const value =
-            opt.key === "balances"
-              ? props.rolloverBalances
-              : opt.key === "budgets"
-                ? props.rolloverBudgets
-                : props.rolloverInvestments;
+          const value = opt.key === "balances" ? props.rolloverBalances : props.rolloverBudgets;
           const setter =
-            opt.key === "balances"
-              ? props.setRolloverBalances
-              : opt.key === "budgets"
-                ? props.setRolloverBudgets
-                : props.setRolloverInvestments;
+            opt.key === "balances" ? props.setRolloverBalances : props.setRolloverBudgets;
           return (
             <label key={opt.key} className="flex items-center gap-2 text-sm cursor-pointer">
               <input
@@ -447,8 +370,7 @@ function StepBalances({
   return (
     <div className="space-y-3">
       <p className="text-sm text-slate-600">
-        Set each account&apos;s opening balance for this month. Opening must match the previous
-        month&apos;s closing to pass the integrity check.
+        Set each account&apos;s opening balance for this month.
       </p>
       <table className="w-full text-sm">
         <thead className="text-xs uppercase text-slate-500">
@@ -543,87 +465,6 @@ function StepBudgets({
           })}
         </tbody>
       </table>
-    </div>
-  );
-}
-
-function StepInvestments({
-  summary,
-  draft,
-  setDraft,
-  currencies,
-}: {
-  summary: MonthSummaryDto;
-  draft: Record<number, { shares: string; invested: string; market: string }>;
-  setDraft: (v: Record<number, { shares: string; invested: string; market: string }>) => void;
-  currencies: { code: string; decimals: number; symbol: string }[];
-}) {
-  if (summary.investments.length === 0) {
-    return (
-      <div className="text-sm text-slate-500">
-        No investments to snapshot yet. You can add holdings from the Investments tab; the
-        wizard will pick them up on next month init.
-      </div>
-    );
-  }
-  return (
-    <div className="space-y-3">
-      <p className="text-sm text-slate-600">
-        Enter the month-end position for each holding. Net change will be calculated vs. the
-        previous month.
-      </p>
-      <table className="w-full text-sm">
-        <thead className="text-xs uppercase text-slate-500">
-          <tr className="border-b border-slate-200">
-            <th className="text-left py-2">Holding</th>
-            <th className="text-right py-2">Shares</th>
-            <th className="text-right py-2">Cost basis</th>
-            <th className="text-right py-2">Market value</th>
-            <th className="text-left py-2 pl-2">Ccy</th>
-          </tr>
-        </thead>
-        <tbody>
-          {summary.investments.map((inv) => {
-            const values = draft[inv.investmentId] ?? { shares: "", invested: "", market: "" };
-            const update = (patch: Partial<typeof values>) =>
-              setDraft({ ...draft, [inv.investmentId]: { ...values, ...patch } });
-            return (
-              <tr key={inv.investmentId} className="border-b border-slate-100">
-                <td className="py-2 font-medium text-slate-800">{inv.investmentName}</td>
-                <td className="py-2 text-right w-28">
-                  <Input
-                    className="text-right"
-                    inputMode="decimal"
-                    value={values.shares}
-                    onChange={(e) => update({ shares: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 text-right w-32">
-                  <Input
-                    className="text-right"
-                    inputMode="decimal"
-                    value={values.invested}
-                    onChange={(e) => update({ invested: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 text-right w-32">
-                  <Input
-                    className="text-right"
-                    inputMode="decimal"
-                    value={values.market}
-                    onChange={(e) => update({ market: e.target.value })}
-                  />
-                </td>
-                <td className="py-2 pl-2 text-slate-600">{inv.currency}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <p className="text-xs text-slate-500">
-        {currencies.length} currencies available. Values entered in each holding&apos;s own
-        currency.
-      </p>
     </div>
   );
 }

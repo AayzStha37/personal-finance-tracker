@@ -27,10 +27,4 @@ public class Investment {
 
     @Column(name = "currency", nullable = false)
     private String currency;
-
-    @Column(name = "account_id")
-    private Long accountId;
-
-    @Column(name = "active", nullable = false)
-    private boolean active;
 }

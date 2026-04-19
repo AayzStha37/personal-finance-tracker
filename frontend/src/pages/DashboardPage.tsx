@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import { api } from "../api/client";
 import type { MonthSummaryDto } from "../api/types";
-import { Badge, Button, Card, EmptyState, StatusPill } from "../components/ui";
+import { Button, Card, EmptyState, StatusPill } from "../components/ui";
 import { formatMoney, monthLabel, signedMoney } from "../lib/money";
 import NewMonthWizard from "../features/newMonth/NewMonthWizard";
 import { useApp } from "../state/AppContext";
@@ -96,11 +96,6 @@ export default function DashboardPage() {
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-3">
             {monthLabel(summary.month.year, summary.month.month)}
             <StatusPill status={summary.month.status} />
-            {summary.integrity.ok ? (
-              <Badge variant="success">Integrity OK</Badge>
-            ) : (
-              <Badge variant="warn">Integrity check failed</Badge>
-            )}
           </h1>
         </div>
         <Button onClick={() => setWizardOpen(true)}>+ New month</Button>
@@ -111,11 +106,6 @@ export default function DashboardPage() {
       <div className="grid md:grid-cols-2 gap-6">
         <BalanceComparisonCard summary={summary} prev={prev} />
         <BudgetCard summary={summary} />
-      </div>
-
-      <div className="grid md:grid-cols-2 gap-6">
-        <InvestmentCard summary={summary} />
-        <IntegritySummaryCard summary={summary} />
       </div>
 
       <NewMonthWizard
@@ -145,9 +135,6 @@ function OverviewCards({
   const totalOpening = sumBy(summary.balances, (b) => b.openingAmount ?? 0);
   const totalClosing = sumBy(summary.balances, (b) => b.closingAmount ?? 0);
   const totalBudget = sumBy(summary.budgets, (b) => b.limitAmount ?? 0);
-  const totalInvestedNow = sumBy(summary.investments, (i) => i.amountInvested ?? 0);
-  const totalInvestedPrev = prev ? sumBy(prev.investments, (i) => i.amountInvested ?? 0) : null;
-  const totalMarket = sumBy(summary.investments, (i) => i.marketValue ?? 0);
   const prevClosing = prev ? sumBy(prev.balances, (b) => b.closingAmount ?? 0) : null;
 
   return (
@@ -170,15 +157,6 @@ function OverviewCards({
       <Stat
         label="Total budget"
         value={formatMoney(totalBudget, base, currencies?.currencies)}
-      />
-      <Stat
-        label="Investments at cost"
-        value={formatMoney(totalInvestedNow, base, currencies?.currencies)}
-        hint={
-          totalInvestedPrev != null
-            ? `market ${formatMoney(totalMarket, base, currencies?.currencies)}`
-            : `market ${formatMoney(totalMarket, base, currencies?.currencies)}`
-        }
       />
     </div>
   );
@@ -356,108 +334,6 @@ function BudgetCard({ summary }: { summary: MonthSummaryDto }) {
             </PieChart>
           </ResponsiveContainer>
         </div>
-      )}
-    </Card>
-  );
-}
-
-function InvestmentCard({ summary }: { summary: MonthSummaryDto }) {
-  const { currencies } = useApp();
-  const rows = summary.investments;
-
-  return (
-    <Card title="Investments" subtitle="Cost basis vs. market value this month.">
-      {rows.length === 0 ? (
-        <EmptyState
-          title="No holdings"
-          description="Add investments from the Investments tab."
-        />
-      ) : (
-        <table className="w-full text-sm">
-          <thead className="text-xs uppercase text-slate-500">
-            <tr className="border-b border-slate-200">
-              <th className="text-left py-2">Holding</th>
-              <th className="text-right">Shares</th>
-              <th className="text-right">Cost</th>
-              <th className="text-right">Market</th>
-              <th className="text-right">Net Δ</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r) => {
-              const gain =
-                r.marketValue != null && r.amountInvested != null
-                  ? r.marketValue - r.amountInvested
-                  : null;
-              return (
-                <tr key={r.investmentId} className="border-b border-slate-100">
-                  <td className="py-2 font-medium text-slate-800">{r.investmentName}</td>
-                  <td className="py-2 text-right text-slate-600">
-                    {r.shares != null ? String(r.shares) : "—"}
-                  </td>
-                  <td className="py-2 text-right text-slate-600">
-                    {formatMoney(r.amountInvested, r.currency, currencies?.currencies)}
-                  </td>
-                  <td className="py-2 text-right text-slate-800">
-                    {formatMoney(r.marketValue, r.currency, currencies?.currencies)}
-                  </td>
-                  <td
-                    className={`py-2 text-right ${
-                      gain == null
-                        ? "text-slate-400"
-                        : gain === 0
-                          ? "text-slate-500"
-                          : gain > 0
-                            ? "text-emerald-600"
-                            : "text-rose-600"
-                    }`}
-                  >
-                    {signedMoney(gain, r.currency, currencies?.currencies)}
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      )}
-    </Card>
-  );
-}
-
-function IntegritySummaryCard({ summary }: { summary: MonthSummaryDto }) {
-  const { currencies } = useApp();
-  const comps = summary.integrity.comparisons;
-  const failing = comps.filter((c) => !c.matches);
-
-  return (
-    <Card
-      title="Integrity check"
-      subtitle="prev.closing == curr.opening per account"
-      actions={
-        summary.integrity.ok ? (
-          <Badge variant="success">PASS</Badge>
-        ) : (
-          <Badge variant="danger">FAIL</Badge>
-        )
-      }
-    >
-      {comps.length === 0 ? (
-        <p className="text-sm text-slate-500">No balances to compare.</p>
-      ) : failing.length === 0 ? (
-        <p className="text-sm text-slate-600">
-          All {comps.length} accounts match their previous closing.
-        </p>
-      ) : (
-        <ul className="space-y-1 text-sm">
-          {failing.map((c) => (
-            <li key={c.accountId} className="flex justify-between gap-4">
-              <span className="text-slate-800">{c.accountName}</span>
-              <span className="text-rose-600">
-                {signedMoney(c.delta, c.currency, currencies?.currencies)}
-              </span>
-            </li>
-          ))}
-        </ul>
       )}
     </Card>
   );

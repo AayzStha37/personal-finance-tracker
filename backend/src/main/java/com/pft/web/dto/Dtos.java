@@ -23,8 +23,7 @@ public final class Dtos {
             @Min(1970) @Max(9999) int year,
             @Min(1)    @Max(12)   int month,
             Boolean rolloverBalances,
-            Boolean rolloverBudgets,
-            Boolean rolloverInvestments) {
+            Boolean rolloverBudgets) {
     }
 
     public record MonthDto(
@@ -38,7 +37,6 @@ public final class Dtos {
             Long previousMonthId,
             List<BalanceDto> balances,
             List<BudgetDto> budgets,
-            List<InvestmentSnapshotDto> investments,
             IntegrityCheckDto integrity) {
     }
 
@@ -114,33 +112,28 @@ public final class Dtos {
     // ---- Investments -----------------------------------------------------
 
     public record InvestmentDto(
-            Long id, String name, String ticker, String type,
-            String currency, Long accountId, boolean active) {
+            Long id, String name, String ticker, String type, String currency) {
     }
 
     public record InvestmentRequest(
             @NotBlank String name,
             String ticker,
             @NotBlank String type,
-            @NotBlank String currency,
-            Long accountId,
-            Boolean active) {
+            @NotBlank String currency) {
     }
 
-    public record InvestmentSnapshotDto(
-            Long investmentId, String investmentName, String currency,
-            BigDecimal shares, Long amountInvested, Long marketValue, Long netChange) {
+    // ---- Share lots ------------------------------------------------------
+
+    public record ShareLotDto(
+            Long id, Long investmentId, Long monthId,
+            BigDecimal shares, long buyPricePerShare, String purchasedDate) {
     }
 
-    public record InvestmentSnapshotUpdate(
+    public record ShareLotRequest(
             @NotNull Long investmentId,
-            @NotNull @PositiveOrZero BigDecimal shares,
-            @NotNull @PositiveOrZero Long amountInvested,
-            Long marketValue) {
-    }
-
-    public record InvestmentSnapshotUpdateRequest(
-            @NotNull @Valid List<InvestmentSnapshotUpdate> snapshots) {
+            @NotNull @DecimalMin("0.0001") BigDecimal shares,
+            @NotNull @Positive Long buyPricePerShare,
+            @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String purchasedDate) {
     }
 
     // ---- Currencies ------------------------------------------------------

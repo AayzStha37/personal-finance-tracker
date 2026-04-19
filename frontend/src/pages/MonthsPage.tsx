@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { Badge, Button, Card, EmptyState, StatusPill } from "../components/ui";
+import { Button, Card, EmptyState, StatusPill } from "../components/ui";
 import { monthLabel } from "../lib/money";
 import NewMonthWizard from "../features/newMonth/NewMonthWizard";
 import { useApp } from "../state/AppContext";
@@ -30,7 +30,6 @@ export default function MonthsPage() {
               <tr className="border-b border-slate-200">
                 <th className="text-left py-2">Period</th>
                 <th className="text-left">Status</th>
-                <th className="text-left">Integrity</th>
                 <th className="text-left">Opened</th>
                 <th className="text-right">Actions</th>
               </tr>
@@ -43,13 +42,6 @@ export default function MonthsPage() {
                   </td>
                   <td className="py-2">
                     <StatusPill status={m.status} />
-                  </td>
-                  <td className="py-2">
-                    {m.integrityOk ? (
-                      <Badge variant="success">OK</Badge>
-                    ) : (
-                      <Badge variant="warn">check</Badge>
-                    )}
                   </td>
                   <td className="py-2 text-slate-600">
                     {m.openedAt ? new Date(m.openedAt).toLocaleDateString() : "—"}

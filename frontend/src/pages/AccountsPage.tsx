@@ -37,7 +37,6 @@ export default function AccountsPage() {
                 <th className="text-left">Kind</th>
                 <th className="text-left">Currency</th>
                 <th className="text-left">Active</th>
-                <th className="text-right">Order</th>
                 <th className="text-right">Actions</th>
               </tr>
             </thead>
@@ -106,7 +105,7 @@ function AccountEditor({
     initial?.currency ?? currencies?.base ?? "CAD",
   );
   const [active, setActive] = useState(initial?.active ?? true);
-  const [displayOrder, setDisplayOrder] = useState(initial?.displayOrder ?? 100);
+  const [displayOrder] = useState(initial?.displayOrder ?? 100);
   const [busy, setBusy] = useState(false);
 
   async function save() {
@@ -175,14 +174,6 @@ function AccountEditor({
           </div>
         </div>
         <div className="grid grid-cols-2 gap-4">
-          <div>
-            <Label>Display order</Label>
-            <Input
-              type="number"
-              value={displayOrder}
-              onChange={(e) => setDisplayOrder(Number(e.target.value))}
-            />
-          </div>
           <label className="flex items-end gap-2 pb-2 text-sm">
             <input
               type="checkbox"

@@ -8,7 +8,9 @@ import type {
   ExpenseEntryRequest,
   IncomeEntryDto,
   IncomeEntryRequest,
+  InvestmentDto,
   MonthSummaryDto,
+  ShareLotDto,
 } from "../api/types";
 import { Badge, Button, Card, Input, Label, Modal, Select, StatusPill } from "../components/ui";
 import { formatMoney, fromMinor, monthLabel, toMinor } from "../lib/money";
@@ -44,21 +46,28 @@ export default function MonthDetailPage() {
   const [confirmLock, setConfirmLock] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseEntryDto | "new" | null>(null);
   const [editingIncome, setEditingIncome] = useState<IncomeEntryDto | "new" | null>(null);
+  const [shareLots, setShareLots] = useState<ShareLotDto[]>([]);
+  const [investments, setInvestments] = useState<InvestmentDto[]>([]);
+  const [addingHolding, setAddingHolding] = useState(false);
 
   async function load() {
     setLoading(true);
     setError(null);
     try {
-      const [s, inst, xs, ins] = await Promise.all([
+      const [s, inst, xs, ins, lots, invs] = await Promise.all([
         api.getMonthSummary(monthId),
         api.listMonthEmiInstallments(monthId),
         api.listExpenses(monthId),
         api.listIncomes(monthId),
+        api.listShareLots(monthId),
+        api.listInvestments(),
       ]);
       setSummary(s);
       setInstallments(inst);
       setExpenses(xs);
       setIncomes(ins);
+      setShareLots(lots);
+      setInvestments(invs);
       const draft: Record<number, string> = {};
       s.balances.forEach((b) => {
         draft[b.accountId] = fromMinor(b.closingAmount, b.currency, currencies?.currencies);
@@ -207,11 +216,6 @@ export default function MonthDetailPage() {
           <h1 className="text-2xl font-semibold text-slate-900 flex items-center gap-3">
             {monthLabel(summary.month.year, summary.month.month)}
             <StatusPill status={summary.month.status} />
-            {summary.integrity.ok ? (
-              <Badge variant="success">Integrity OK</Badge>
-            ) : (
-              <Badge variant="warn">Integrity failed</Badge>
-            )}
           </h1>
           <p className="text-sm text-slate-500 mt-1">
             Opened {summary.month.openedAt ? new Date(summary.month.openedAt).toLocaleString() : "—"}
@@ -222,7 +226,7 @@ export default function MonthDetailPage() {
         </div>
         <div className="flex gap-2">
           {summary.month.status === "DRAFT" && (
-            <Button onClick={activate} disabled={busy || !summary.integrity.ok}>
+            <Button onClick={activate} disabled={busy}>
               Activate
             </Button>
           )}
@@ -230,7 +234,7 @@ export default function MonthDetailPage() {
             <Button
               variant="danger"
               onClick={() => setConfirmLock(true)}
-              disabled={busy || !summary.integrity.ok}
+              disabled={busy}
             >
               Lock month
             </Button>
@@ -366,34 +370,75 @@ export default function MonthDetailPage() {
           )}
         </Card>
 
-        <Card title="Investments">
-          {summary.investments.length === 0 ? (
-            <p className="text-sm text-slate-500">No holdings tracked this month.</p>
+        <Card
+          title="Investments"
+          subtitle="Share lots purchased this month"
+          actions={
+            !locked && (
+              <Button variant="secondary" onClick={() => setAddingHolding(true)}>
+                + Add holding
+              </Button>
+            )
+          }
+        >
+          {shareLots.length === 0 ? (
+            <p className="text-sm text-slate-500">No holdings added this month.</p>
           ) : (
             <table className="w-full text-sm">
               <thead className="text-xs uppercase text-slate-500">
                 <tr className="border-b border-slate-200">
                   <th className="text-left py-1.5">Holding</th>
                   <th className="text-right">Shares</th>
-                  <th className="text-right">Cost</th>
-                  <th className="text-right">Market</th>
+                  <th className="text-right">Buy price</th>
+                  <th className="text-right">Total cost</th>
+                  <th className="text-left pl-2">Date</th>
+                  {!locked && <th className="text-right">Action</th>}
                 </tr>
               </thead>
               <tbody>
-                {summary.investments.map((i) => (
-                  <tr key={i.investmentId} className="border-b border-slate-100">
-                    <td className="py-1.5 text-slate-800">{i.investmentName}</td>
-                    <td className="py-1.5 text-right text-slate-600">
-                      {i.shares != null ? String(i.shares) : "—"}
-                    </td>
-                    <td className="py-1.5 text-right">
-                      {formatMoney(i.amountInvested, i.currency, currencies?.currencies)}
-                    </td>
-                    <td className="py-1.5 text-right">
-                      {formatMoney(i.marketValue, i.currency, currencies?.currencies)}
-                    </td>
-                  </tr>
-                ))}
+                {shareLots.map((lot) => {
+                  const inv = investments.find((i) => i.id === lot.investmentId);
+                  const shares = Number(lot.shares);
+                  const totalCost = Math.round(shares * lot.buyPricePerShare);
+                  return (
+                    <tr key={lot.id} className="border-b border-slate-100">
+                      <td className="py-1.5 text-slate-800">
+                        {inv?.name ?? `#${lot.investmentId}`}
+                        {inv?.ticker && (
+                          <span className="ml-1 text-xs text-slate-500">{inv.ticker}</span>
+                        )}
+                      </td>
+                      <td className="py-1.5 text-right text-slate-600">{String(lot.shares)}</td>
+                      <td className="py-1.5 text-right text-slate-600">
+                        {formatMoney(lot.buyPricePerShare, inv?.currency ?? "CAD", currencies?.currencies)}
+                      </td>
+                      <td className="py-1.5 text-right font-medium">
+                        {formatMoney(totalCost, inv?.currency ?? "CAD", currencies?.currencies)}
+                      </td>
+                      <td className="py-1.5 pl-2 text-slate-500 text-xs">{lot.purchasedDate}</td>
+                      {!locked && (
+                        <td className="py-1.5 text-right">
+                          <button
+                            className="text-rose-600 hover:text-rose-800 text-sm font-medium"
+                            onClick={async () => {
+                              if (!confirm("Delete this share lot?")) return;
+                              setBusy(true);
+                              try {
+                                await api.deleteShareLot(lot.id);
+                                await load();
+                              } finally {
+                                setBusy(false);
+                              }
+                            }}
+                            disabled={busy}
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           )}
@@ -586,43 +631,6 @@ export default function MonthDetailPage() {
         )}
       </Card>
 
-      <Card title="Integrity comparisons" subtitle="Per-account prev.closing vs. curr.opening">
-        <table className="w-full text-sm">
-          <thead className="text-xs uppercase text-slate-500">
-            <tr className="border-b border-slate-200">
-              <th className="text-left py-1.5">Account</th>
-              <th className="text-right">Prev closing</th>
-              <th className="text-right">Opening</th>
-              <th className="text-right">Δ</th>
-              <th className="text-right">Match</th>
-            </tr>
-          </thead>
-          <tbody>
-            {summary.integrity.comparisons.map((c) => (
-              <tr key={c.accountId} className="border-b border-slate-100">
-                <td className="py-1.5 text-slate-800">{c.accountName}</td>
-                <td className="py-1.5 text-right text-slate-600">
-                  {formatMoney(c.previousClosing, c.currency, currencies?.currencies)}
-                </td>
-                <td className="py-1.5 text-right text-slate-900">
-                  {formatMoney(c.currentOpening, c.currency, currencies?.currencies)}
-                </td>
-                <td
-                  className={`py-1.5 text-right ${
-                    c.delta == null || c.delta === 0 ? "text-slate-500" : "text-rose-600"
-                  }`}
-                >
-                  {c.delta == null ? "—" : (c.delta > 0 ? "+" : "") + formatMoney(c.delta, c.currency, currencies?.currencies)}
-                </td>
-                <td className="py-1.5 text-right">
-                  {c.matches ? <Badge variant="success">✓</Badge> : <Badge variant="danger">✗</Badge>}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </Card>
-
       {editingExpense && (
         <ExpenseEditor
           initial={editingExpense === "new" ? null : editingExpense}
@@ -642,6 +650,18 @@ export default function MonthDetailPage() {
           onClose={() => setEditingIncome(null)}
           onSaved={async () => {
             setEditingIncome(null);
+            await load();
+          }}
+        />
+      )}
+
+      {addingHolding && (
+        <AddHoldingModal
+          monthId={monthId}
+          investments={investments}
+          onClose={() => setAddingHolding(false)}
+          onSaved={async () => {
+            setAddingHolding(false);
             await load();
           }}
         />
@@ -913,6 +933,184 @@ function IncomeEditor({
         </Button>
         <Button onClick={submit} disabled={busy}>
           {busy ? "Saving…" : initial ? "Update" : "Create"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
+const INVESTMENT_TYPES = ["ETF", "STOCK", "MF", "CRYPTO", "BOND"];
+
+function AddHoldingModal({
+  monthId,
+  investments,
+  onClose,
+  onSaved,
+}: {
+  monthId: number;
+  investments: InvestmentDto[];
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const { currencies } = useApp();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const [mode, setMode] = useState<"existing" | "new">(investments.length > 0 ? "existing" : "new");
+  const [investmentId, setInvestmentId] = useState<number>(investments[0]?.id ?? 0);
+
+  const [name, setName] = useState("");
+  const [ticker, setTicker] = useState("");
+  const [type, setType] = useState(INVESTMENT_TYPES[0]);
+  const [currency, setCurrency] = useState(currencies?.currencies[0]?.code ?? "CAD");
+
+  const [shares, setShares] = useState("");
+  const [buyPrice, setBuyPrice] = useState("");
+  const [purchasedDate, setPurchasedDate] = useState(today);
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function submit() {
+    if (!shares || !buyPrice) {
+      setError("Shares and buy price are required.");
+      return;
+    }
+    const sharesNum = Number(shares);
+    if (!Number.isFinite(sharesNum) || sharesNum <= 0) {
+      setError("Shares must be a positive number.");
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+    try {
+      let targetId = investmentId;
+
+      if (mode === "new") {
+        if (!name.trim()) {
+          setError("Name is required for a new investment.");
+          setBusy(false);
+          return;
+        }
+        const inv = await api.createInvestment({
+          name: name.trim(),
+          ticker: ticker.trim() || null,
+          type,
+          currency,
+        });
+        targetId = inv.id;
+      }
+
+      const lotCurrency = mode === "new"
+        ? currency
+        : investments.find((i) => i.id === targetId)?.currency ?? "CAD";
+      const buyMinor = toMinor(buyPrice, lotCurrency, currencies?.currencies);
+      if (buyMinor == null || buyMinor <= 0) {
+        setError("Buy price must be a positive number.");
+        setBusy(false);
+        return;
+      }
+
+      await api.createShareLot(monthId, {
+        investmentId: targetId,
+        shares: sharesNum,
+        buyPricePerShare: buyMinor,
+        purchasedDate,
+      });
+
+      await onSaved();
+    } catch (e) {
+      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal open onClose={onClose} title="Add holding" size="md">
+      <div className="space-y-4">
+        {investments.length > 0 && (
+          <div className="flex gap-2">
+            <button
+              className={`text-sm px-3 py-1 rounded-full ${mode === "existing" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
+              onClick={() => setMode("existing")}
+            >
+              Existing investment
+            </button>
+            <button
+              className={`text-sm px-3 py-1 rounded-full ${mode === "new" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600"}`}
+              onClick={() => setMode("new")}
+            >
+              New investment
+            </button>
+          </div>
+        )}
+
+        {mode === "existing" ? (
+          <div>
+            <Label>Investment</Label>
+            <Select value={investmentId} onChange={(e) => setInvestmentId(Number(e.target.value))}>
+              {investments.map((i) => (
+                <option key={i.id} value={i.id}>
+                  {i.name} {i.ticker ? `(${i.ticker})` : ""} — {i.currency}
+                </option>
+              ))}
+            </Select>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-3">
+            <div className="col-span-2">
+              <Label>Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. XEQT" />
+            </div>
+            <div>
+              <Label>Ticker</Label>
+              <Input value={ticker} onChange={(e) => setTicker(e.target.value)} placeholder="Optional" />
+            </div>
+            <div>
+              <Label>Type</Label>
+              <Select value={type} onChange={(e) => setType(e.target.value)}>
+                {INVESTMENT_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+              </Select>
+            </div>
+            <div className="col-span-2">
+              <Label>Currency</Label>
+              <Select value={currency} onChange={(e) => setCurrency(e.target.value)}>
+                {(currencies?.currencies ?? []).map((c) => (
+                  <option key={c.code} value={c.code}>{c.code}</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 gap-3">
+          <div>
+            <Label>Shares</Label>
+            <Input inputMode="decimal" value={shares} onChange={(e) => setShares(e.target.value)} />
+          </div>
+          <div>
+            <Label>Buy price / share</Label>
+            <Input inputMode="decimal" value={buyPrice} onChange={(e) => setBuyPrice(e.target.value)} />
+          </div>
+          <div>
+            <Label>Purchase date</Label>
+            <Input type="date" value={purchasedDate} onChange={(e) => setPurchasedDate(e.target.value)} />
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4 rounded-lg border border-rose-200 bg-rose-50 text-rose-800 text-sm px-3 py-2">
+          {error}
+        </div>
+      )}
+      <div className="flex justify-end gap-2 mt-5">
+        <Button variant="ghost" onClick={onClose} disabled={busy}>Cancel</Button>
+        <Button onClick={submit} disabled={busy}>
+          {busy ? "Saving…" : "Add holding"}
         </Button>
       </div>
     </Modal>

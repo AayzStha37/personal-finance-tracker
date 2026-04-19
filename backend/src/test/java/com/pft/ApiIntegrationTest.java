@@ -166,6 +166,64 @@ class ApiIntegrationTest {
 
         // --- lock can't be re-applied: already LOCKED returns 409 -----------
         mvc.perform(post("/api/months/" + aprilId + "/lock")).andExpect(status().isConflict());
+
+        // --- Investments CRUD -----------------------------------------------
+        JsonNode inv = postJson("/api/investments", """
+                {"name":"VFV","ticker":"VFV.TO","type":"ETF","currency":"CAD"}
+                """);
+        long invId = inv.get("id").asLong();
+        assertThat(inv.get("name").asText()).isEqualTo("VFV");
+        assertThat(inv.get("ticker").asText()).isEqualTo("VFV.TO");
+        assertThat(inv.get("type").asText()).isEqualTo("ETF");
+
+        // update investment
+        postJsonExpect(put("/api/investments/" + invId), """
+                {"name":"VFV Updated","ticker":"VFV.TO","type":"ETF","currency":"CAD"}
+                """, 200);
+
+        JsonNode invList = getJson("/api/investments");
+        assertThat(invList).hasSize(1);
+        assertThat(invList.get(0).get("name").asText()).isEqualTo("VFV Updated");
+
+        // revert name for clarity
+        postJsonExpect(put("/api/investments/" + invId), """
+                {"name":"VFV","ticker":"VFV.TO","type":"ETF","currency":"CAD"}
+                """, 200);
+
+        // --- Share lots: create on ACTIVE month (May) -----------------------
+        JsonNode lot = postJson("/api/months/" + mayId + "/share-lots", """
+                {"investmentId":%d,"shares":10.5,"buyPricePerShare":5000,"purchasedDate":"2026-05-10"}
+                """.formatted(invId));
+        long lotId = lot.get("id").asLong();
+        assertThat(lot.get("investmentId").asLong()).isEqualTo(invId);
+        assertThat(lot.get("shares").decimalValue().doubleValue()).isEqualTo(10.5);
+        assertThat(lot.get("buyPricePerShare").asLong()).isEqualTo(5000);
+
+        // list lots by investment
+        JsonNode lotsByInv = getJson("/api/investments/" + invId + "/lots");
+        assertThat(lotsByInv).hasSize(1);
+
+        // list lots by month
+        JsonNode lotsByMonth = getJson("/api/months/" + mayId + "/share-lots");
+        assertThat(lotsByMonth).hasSize(1);
+
+        // --- Share lots: create on LOCKED month fails -----------------------
+        mvc.perform(post("/api/months/" + aprilId + "/share-lots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"investmentId":%d,"shares":5,"buyPricePerShare":5000,"purchasedDate":"2026-04-10"}
+                                """.formatted(invId)))
+                .andExpect(status().isConflict());
+
+        // --- Delete share lot -----------------------------------------------
+        mvc.perform(delete("/api/investments/lots/" + lotId))
+                .andExpect(status().isNoContent());
+        assertThat(getJson("/api/investments/" + invId + "/lots")).isEmpty();
+
+        // --- Delete investment ----------------------------------------------
+        mvc.perform(delete("/api/investments/" + invId))
+                .andExpect(status().isNoContent());
+        assertThat(getJson("/api/investments")).isEmpty();
     }
 
     // ---- helpers --------------------------------------------------------

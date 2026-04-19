@@ -3,6 +3,7 @@ package com.pft.web;
 import com.pft.service.InvestmentService;
 import com.pft.web.dto.Dtos.InvestmentDto;
 import com.pft.web.dto.Dtos.InvestmentRequest;
+import com.pft.web.dto.Dtos.ShareLotDto;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -37,6 +38,17 @@ public class InvestmentController {
     @DeleteMapping("/{id}")
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         investments.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
+    @GetMapping("/{id}/lots")
+    public List<ShareLotDto> listLots(@PathVariable Long id) {
+        return investments.listLotsByInvestment(id);
+    }
+
+    @DeleteMapping("/lots/{lotId}")
+    public ResponseEntity<Void> deleteLot(@PathVariable Long lotId) {
+        investments.deleteLot(lotId);
         return ResponseEntity.noContent().build();
     }
 }
