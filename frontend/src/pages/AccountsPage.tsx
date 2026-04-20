@@ -4,7 +4,17 @@ import type { AccountDto, AccountKind, AccountRequest } from "../api/types";
 import { Badge, Button, Card, Input, Label, Modal, Select } from "../components/ui";
 import { useApp } from "../state/AppContext";
 
-const KINDS: AccountKind[] = ["BANK", "CASH", "CREDIT", "INVESTMENT"];
+const KINDS: { value: AccountKind; label: string }[] = [
+  { value: "BANK_CHQ", label: "Bank (CHQ)" },
+  { value: "BANK_SVG", label: "Bank (SVG)" },
+  { value: "CASH", label: "Cash" },
+  { value: "CREDIT", label: "Credit" },
+  { value: "INVESTMENT", label: "Investment" },
+];
+
+function kindLabel(kind: AccountKind): string {
+  return KINDS.find((k) => k.value === kind)?.label ?? kind;
+}
 
 export default function AccountsPage() {
   const app = useApp();
@@ -45,7 +55,7 @@ export default function AccountsPage() {
                 <tr key={a.id} className="border-b border-slate-100">
                   <td className="py-2 font-medium text-slate-800">{a.name}</td>
                   <td className="py-2">
-                    <Badge variant="default">{a.kind}</Badge>
+                    <Badge variant="default">{kindLabel(a.kind)}</Badge>
                   </td>
                   <td className="py-2 text-slate-600">{a.currency}</td>
                   <td className="py-2">
@@ -55,7 +65,6 @@ export default function AccountsPage() {
                       <Badge variant="default">no</Badge>
                     )}
                   </td>
-                  <td className="py-2 text-right text-slate-600">{a.displayOrder}</td>
                   <td className="py-2 text-right">
                     <button
                       className="text-slate-700 hover:text-slate-900 text-sm font-medium"
@@ -100,18 +109,17 @@ function AccountEditor({
 }) {
   const { currencies } = useApp();
   const [name, setName] = useState(initial?.name ?? "");
-  const [kind, setKind] = useState<AccountKind>(initial?.kind ?? "BANK");
+  const [kind, setKind] = useState<AccountKind>(initial?.kind ?? "BANK_SVG");
   const [currency, setCurrency] = useState(
     initial?.currency ?? currencies?.base ?? "CAD",
   );
   const [active, setActive] = useState(initial?.active ?? true);
-  const [displayOrder] = useState(initial?.displayOrder ?? 100);
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
     try {
-      const req: AccountRequest = { name, kind, currency, active, displayOrder };
+      const req: AccountRequest = { name, kind, currency, active };
       if (initial) await api.updateAccount(initial.id, req);
       else await api.createAccount(req);
       await onSaved();
@@ -156,8 +164,8 @@ function AccountEditor({
             <Label>Kind</Label>
             <Select value={kind} onChange={(e) => setKind(e.target.value as AccountKind)}>
               {KINDS.map((k) => (
-                <option key={k} value={k}>
-                  {k}
+                <option key={k.value} value={k.value}>
+                  {k.label}
                 </option>
               ))}
             </Select>

@@ -107,7 +107,7 @@ public class MonthService {
                 .filter(s -> s.getClosingAmount() != null)
                 .forEach(s -> prevClosingByAccount.put(s.getAccountId(), s.getClosingAmount())));
 
-        for (Account a : accounts.findAllByActiveTrueOrderByDisplayOrderAscIdAsc()) {
+        for (Account a : accounts.findAllByActiveTrueOrderByIdAsc()) {
             Long opening = prevClosingByAccount.getOrDefault(a.getId(), 0L);
             MonthlyBalanceSnapshot s = MonthlyBalanceSnapshot.builder()
                     .monthId(current.getId())

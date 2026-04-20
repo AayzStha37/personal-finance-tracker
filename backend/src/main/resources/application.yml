@@ -40,8 +40,3 @@ pft:
   base-currency: CAD
   cors:
     allowed-origins: ${PFT_CORS_ORIGINS:http://localhost:5173}
-  fx:
-    # open.er-api.com: free, no API key, supports CAD/USD/INR/NPR and 150+ others.
-    # {base} is substituted with the `from` currency at request time.
-    provider-url: https://open.er-api.com/v6/latest/{base}
-    timeout-ms: 10000

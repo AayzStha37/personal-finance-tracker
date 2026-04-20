@@ -25,7 +25,13 @@
       "Bash(./mvnw compile:*)",
       "Bash(ls *.cmd .mvn/ mvnw)",
       "Bash(ls -la mvn*)",
-      "Bash(mvn compile:*)"
+      "Bash(mvn compile:*)",
+      "Bash(docker compose:*)",
+      "Bash(rm:*)",
+      "Bash(ls mvnw*)",
+      "Bash(ls -la *.cmd)",
+      "Bash(ls -la *.bat)",
+      "Bash(xargs grep:*)"
     ]
   },
   "enableAllProjectMcpServers": true,

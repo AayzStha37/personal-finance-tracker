@@ -12,8 +12,6 @@ import type {
   EmiInstallmentDto,
   EmiPlanDto,
   EmiPlanRequest,
-  ExchangeRateDto,
-  ExchangeRateUpsert,
   ExpenseEntryDto,
   ExpenseEntryRequest,
   IncomeEntryDto,
@@ -125,6 +123,11 @@ export const api = {
     }),
   deleteShareLot: (lotId: number) =>
     request<void>(`/investments/lots/${lotId}`, { method: "DELETE" }),
+  createLegacyShareLot: (req: ShareLotRequest) =>
+    request<ShareLotDto>("/investments/lots", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
 
   // Budget categories
   listBudgetCategories: () => request<BudgetCategoryDto[]>("/budget-categories"),
@@ -174,8 +177,8 @@ export const api = {
     }),
   cancelEmiPlan: (id: number) =>
     request<EmiPlanDto>(`/emi/plans/${id}/cancel`, { method: "POST" }),
-  skipEmiInstallment: (id: number) =>
-    request<EmiInstallmentDto>(`/emi/installments/${id}/skip`, { method: "POST" }),
+  earlyPayoffEmiPlan: (planId: number, monthId: number) =>
+    request<EmiPlanDto>(`/emi/plans/${planId}/early-payoff?monthId=${monthId}`, { method: "POST" }),
 
   // Expenses
   listExpenses: (monthId: number) =>
@@ -192,24 +195,6 @@ export const api = {
     }),
   deleteExpense: (id: number) =>
     request<void>(`/expenses/${id}`, { method: "DELETE" }),
-
-  // Exchange rates
-  listExchangeRates: (month?: string) =>
-    request<ExchangeRateDto[]>(
-      month ? `/exchange-rates?month=${encodeURIComponent(month)}` : "/exchange-rates",
-    ),
-  upsertExchangeRate: (req: ExchangeRateUpsert) =>
-    request<ExchangeRateDto>("/exchange-rates", {
-      method: "PUT",
-      body: JSON.stringify(req),
-    }),
-  autoFetchExchangeRate: (from: string, to: string, month: string) =>
-    request<ExchangeRateDto>(
-      `/exchange-rates/auto-fetch?from=${encodeURIComponent(from)}&to=${encodeURIComponent(
-        to,
-      )}&month=${encodeURIComponent(month)}`,
-      { method: "POST" },
-    ),
 
   // Incomes
   listIncomes: (monthId: number) =>

@@ -1,7 +1,7 @@
 // Shared types mirroring backend DTOs (com.pft.web.dto.Dtos).
 
 export type MonthStatus = "DRAFT" | "ACTIVE" | "LOCKED";
-export type AccountKind = "BANK" | "CASH" | "CREDIT" | "INVESTMENT";
+export type AccountKind = "BANK_CHQ" | "BANK_SVG" | "CASH" | "CREDIT" | "INVESTMENT";
 
 export interface MonthDto {
   id: number;
@@ -86,19 +86,23 @@ export interface InvestmentRequest {
   currency: string;
 }
 
+export type LotType = "BUY" | "SELL";
+
 export interface ShareLotDto {
   id: number;
   investmentId: number;
-  monthId: number;
+  monthId: number | null;
+  lotType: LotType;
   shares: number | string;
-  buyPricePerShare: number;
+  pricePerShare: number;
   purchasedDate: string;
 }
 
 export interface ShareLotRequest {
   investmentId: number;
+  lotType?: LotType;
   shares: number | string;
-  buyPricePerShare: number;
+  pricePerShare: number;
   purchasedDate: string;
 }
 
@@ -116,7 +120,6 @@ export interface AccountDto {
   kind: AccountKind;
   currency: string;
   active: boolean;
-  displayOrder: number;
 }
 
 export interface AccountRequest {
@@ -124,7 +127,6 @@ export interface AccountRequest {
   kind: AccountKind;
   currency: string;
   active?: boolean;
-  displayOrder?: number;
 }
 
 export interface CurrencyDto {
@@ -143,27 +145,6 @@ export interface ApiError {
   error: string;
   message: string;
   details: string[] | null;
-}
-
-// ---- Exchange rates --------------------------------------------------
-
-export type ExchangeRateSource = "AUTO" | "MANUAL";
-
-export interface ExchangeRateDto {
-  id: number;
-  fromCurrency: string;
-  toCurrency: string;
-  rate: number | string;
-  effectiveMonth: string;
-  source: ExchangeRateSource;
-  fetchedAt: string | null;
-}
-
-export interface ExchangeRateUpsert {
-  fromCurrency: string;
-  toCurrency: string;
-  rate: number | string;
-  effectiveMonth: string;
 }
 
 // ---- EMI --------------------------------------------------------------
@@ -239,8 +220,7 @@ export interface IncomeEntryDto {
   monthId: number;
   accountId: number | null;
   source: string;
-  grossAmount: number;
-  netAmount: number;
+  amount: number;
   currency: string;
   receivedDate: string;
   weekOfMonth: number | null;
@@ -249,8 +229,7 @@ export interface IncomeEntryDto {
 export interface IncomeEntryRequest {
   accountId?: number | null;
   source: string;
-  grossAmount: number;
-  netAmount: number;
+  amount: number;
   currency: string;
   receivedDate: string;
   weekOfMonth?: number | null;

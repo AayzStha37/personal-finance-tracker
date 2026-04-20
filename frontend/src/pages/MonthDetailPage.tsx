@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { api, HttpError } from "../api/client";
 import type {
-  BalanceUpdate,
   EmiInstallmentDto,
   ExpenseEntryDto,
   ExpenseEntryRequest,
@@ -16,23 +15,13 @@ import { Badge, Button, Card, Input, Label, Modal, Select, StatusPill } from "..
 import { formatMoney, fromMinor, monthLabel, toMinor } from "../lib/money";
 import { useApp } from "../state/AppContext";
 
-const INCOME_SOURCES = [
-  "Salary",
-  "MOMO Business",
-  "Side Gigs",
-  "Bonuses",
-  "Interest",
-  "Dividends",
-  "Refund",
-  "Gift",
-  "Other",
-];
+
 
 export default function MonthDetailPage() {
   const { id } = useParams<{ id: string }>();
   const monthId = Number(id);
   const app = useApp();
-  const { currencies, accounts, categories } = app;
+  const { currencies, categories } = app;
 
   const [summary, setSummary] = useState<MonthSummaryDto | null>(null);
   const [installments, setInstallments] = useState<EmiInstallmentDto[]>([]);
@@ -40,8 +29,6 @@ export default function MonthDetailPage() {
   const [incomes, setIncomes] = useState<IncomeEntryDto[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [editingClose, setEditingClose] = useState(false);
-  const [closing, setClosing] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const [confirmLock, setConfirmLock] = useState(false);
   const [editingExpense, setEditingExpense] = useState<ExpenseEntryDto | "new" | null>(null);
@@ -68,11 +55,6 @@ export default function MonthDetailPage() {
       setIncomes(ins);
       setShareLots(lots);
       setInvestments(invs);
-      const draft: Record<number, string> = {};
-      s.balances.forEach((b) => {
-        draft[b.accountId] = fromMinor(b.closingAmount, b.currency, currencies?.currencies);
-      });
-      setClosing(draft);
     } catch (e) {
       setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
     } finally {
@@ -83,29 +65,6 @@ export default function MonthDetailPage() {
   useEffect(() => {
     void load();
   }, [monthId]);
-
-  async function saveClosing() {
-    if (!summary) return;
-    setBusy(true);
-    try {
-      const updates: BalanceUpdate[] = summary.balances.map((b) => ({
-        accountId: b.accountId,
-        openingAmount: b.openingAmount,
-        closingAmount:
-          closing[b.accountId] === "" || closing[b.accountId] == null
-            ? null
-            : toMinor(closing[b.accountId], b.currency, currencies?.currencies),
-      }));
-      await api.updateBalances(summary.month.id, updates);
-      await load();
-      setEditingClose(false);
-      await app.refresh();
-    } catch (e) {
-      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   async function activate() {
     if (!summary) return;
@@ -129,18 +88,6 @@ export default function MonthDetailPage() {
       setConfirmLock(false);
       await load();
       await app.refresh();
-    } catch (e) {
-      setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function skipInstallment(instId: number) {
-    setBusy(true);
-    try {
-      await api.skipEmiInstallment(instId);
-      await load();
     } catch (e) {
       setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
     } finally {
@@ -185,10 +132,9 @@ export default function MonthDetailPage() {
   if (!summary) return null;
 
   const locked = summary.month.status === "LOCKED";
+  const base = currencies?.base ?? "CAD";
   const categoryLabel = (cid: number) =>
     categories.find((c) => c.id === cid)?.label ?? `Category #${cid}`;
-  const accountName = (aid: number | null) =>
-    aid == null ? "—" : accounts.find((a) => a.id === aid)?.name ?? `Account #${aid}`;
 
   // Group expenses by category (sorted by category displayOrder)
   const expensesByCategory = (() => {
@@ -198,16 +144,25 @@ export default function MonthDetailPage() {
       list.push(x);
       grouped.set(x.categoryId, list);
     }
-    // Sort groups by category displayOrder
     return [...grouped.entries()]
       .map(([cid, items]) => ({
         categoryId: cid,
         label: categoryLabel(cid),
         displayOrder: categories.find((c) => c.id === cid)?.displayOrder ?? 999,
         items,
+        total: items.reduce((s, x) => s + x.amount, 0),
       }))
       .sort((a, b) => a.displayOrder - b.displayOrder);
   })();
+
+  const totalExpenses = expenses.reduce((s, x) => s + x.amount, 0);
+  const totalIncome = incomes.reduce((s, i) => i.amount + s, 0);
+  const totalInvested = shareLots.reduce(
+    (s, l) => s + Math.round(Number(l.shares) * l.pricePerShare),
+    0,
+  );
+  const totalBudget = summary.budgets.reduce((s, b) => s + (b.limitAmount ?? 0), 0);
+  const budgetDiff = totalBudget - totalExpenses;
 
   return (
     <div className="space-y-6">
@@ -242,6 +197,7 @@ export default function MonthDetailPage() {
         </div>
       </header>
 
+      {/* Lock confirmation modal */}
       <Modal
         open={confirmLock}
         onClose={() => setConfirmLock(false)}
@@ -249,127 +205,130 @@ export default function MonthDetailPage() {
         size="sm"
       >
         <p className="text-sm text-slate-700">
-          Locking finalises {monthLabel(summary.month.year, summary.month.month)}. Past months
-          cannot be edited once locked — balances, budgets, investments, expenses, income and EMI
-          installments for this month will all become read-only.
+          Locking finalises <strong>{monthLabel(summary.month.year, summary.month.month)}</strong>.
+          All balances, budgets, investments, expenses and income for this month
+          will become <strong>read-only</strong> and cannot be edited.
         </p>
+        <p className="text-sm text-slate-500 mt-2">This action cannot be undone.</p>
         <div className="flex justify-end gap-2 mt-5">
           <Button variant="ghost" onClick={() => setConfirmLock(false)} disabled={busy}>
             Cancel
           </Button>
           <Button variant="danger" onClick={lockMonth} disabled={busy}>
-            {busy ? "Locking…" : "Lock month"}
+            {busy ? "Locking…" : "Yes, lock month"}
           </Button>
         </div>
       </Modal>
 
-      <Card
-        title="Balances"
-        actions={
-          !locked && (
-            <>
-              {editingClose ? (
-                <>
-                  <Button variant="ghost" onClick={() => setEditingClose(false)} disabled={busy}>
-                    Cancel
-                  </Button>
-                  <Button onClick={saveClosing} disabled={busy}>
-                    {busy ? "Saving…" : "Save closing"}
-                  </Button>
-                </>
-              ) : (
-                <Button variant="secondary" onClick={() => setEditingClose(true)}>
-                  Set closing balances
-                </Button>
-              )}
-            </>
-          )
-        }
-      >
+      {/* Balances — opening only */}
+      <Card title="Balances">
         <table className="w-full text-sm">
           <thead className="text-xs uppercase text-slate-500">
             <tr className="border-b border-slate-200">
               <th className="text-left py-2">Account</th>
-              <th className="text-right">Opening</th>
-              <th className="text-right">Closing</th>
-              <th className="text-right">Change</th>
+              <th className="text-right">Currency</th>
+              <th className="text-right">Opening balance</th>
             </tr>
           </thead>
           <tbody>
-            {summary.balances.map((b) => {
-              const change =
-                b.openingAmount != null && b.closingAmount != null
-                  ? b.closingAmount - b.openingAmount
-                  : null;
-              return (
-                <tr key={b.accountId} className="border-b border-slate-100">
-                  <td className="py-2 font-medium text-slate-800">{b.accountName}</td>
-                  <td className="py-2 text-right text-slate-600">
-                    {formatMoney(b.openingAmount, b.currency, currencies?.currencies)}
-                  </td>
-                  <td className="py-2 text-right text-slate-900 w-36">
-                    {editingClose ? (
-                      <Input
-                        className="text-right"
-                        inputMode="decimal"
-                        value={closing[b.accountId] ?? ""}
-                        onChange={(e) =>
-                          setClosing({ ...closing, [b.accountId]: e.target.value })
-                        }
-                      />
-                    ) : (
-                      formatMoney(b.closingAmount, b.currency, currencies?.currencies)
-                    )}
-                  </td>
-                  <td
-                    className={`py-2 text-right ${
-                      change == null
-                        ? "text-slate-400"
-                        : change === 0
-                          ? "text-slate-500"
-                          : change > 0
-                            ? "text-emerald-600"
-                            : "text-rose-600"
-                    }`}
-                  >
-                    {change == null
-                      ? "—"
-                      : (change > 0 ? "+" : "") +
-                        formatMoney(change, b.currency, currencies?.currencies)}
-                  </td>
-                </tr>
-              );
-            })}
+            {summary.balances.map((b) => (
+              <tr key={b.accountId} className="border-b border-slate-100">
+                <td className="py-2 font-medium text-slate-800">{b.accountName}</td>
+                <td className="py-2 text-right text-slate-500">{b.currency}</td>
+                <td className="py-2 text-right text-slate-900">
+                  {formatMoney(b.openingAmount, b.currency, currencies?.currencies)}
+                </td>
+              </tr>
+            ))}
           </tbody>
         </table>
       </Card>
 
       <div className="grid md:grid-cols-2 gap-6">
-        <Card title="Budgets" subtitle={`Limits for ${monthLabel(summary.month.year, summary.month.month)}`}>
+        {/* Budgets — with under/par/over status */}
+        <Card
+          title="Budgets"
+          subtitle={
+            totalBudget > 0
+              ? undefined
+              : `Limits for ${monthLabel(summary.month.year, summary.month.month)}`
+          }
+        >
           {summary.budgets.length === 0 ? (
             <p className="text-sm text-slate-500">No budgets set.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-slate-500">
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-1.5">Category</th>
-                  <th className="text-right">Limit</th>
-                </tr>
-              </thead>
-              <tbody>
-                {summary.budgets.map((b) => (
-                  <tr key={b.categoryId} className="border-b border-slate-100">
-                    <td className="py-1.5 text-slate-800">{b.categoryLabel}</td>
-                    <td className="py-1.5 text-right">
-                      {formatMoney(b.limitAmount, b.currency, currencies?.currencies)}
-                    </td>
+            <>
+              <div className="flex items-baseline justify-between mb-3">
+                <p className="text-lg font-semibold text-slate-900">
+                  {formatMoney(totalBudget, base, currencies?.currencies)}
+                </p>
+                {totalBudget > 0 && (
+                  <span
+                    className={`text-sm font-medium ${budgetDiff > 0
+                        ? "text-emerald-600"
+                        : budgetDiff === 0
+                          ? "text-amber-600"
+                          : "text-rose-600"
+                      }`}
+                  >
+                    {budgetDiff > 0
+                      ? `${formatMoney(budgetDiff, base, currencies?.currencies)} under budget`
+                      : budgetDiff === 0
+                        ? "On par"
+                        : `${formatMoney(Math.abs(budgetDiff), base, currencies?.currencies)} over budget`}
+                  </span>
+                )}
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-slate-500">
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-1.5">Category</th>
+                    <th className="text-right">Limit</th>
+                    <th className="text-right">Spent</th>
+                    <th className="text-right">Status</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {summary.budgets.map((b) => {
+                    const spent = expenses
+                      .filter((e) => e.categoryId === b.categoryId)
+                      .reduce((s, e) => s + e.amount, 0);
+                    const diff = (b.limitAmount ?? 0) - spent;
+                    return (
+                      <tr key={b.categoryId} className="border-b border-slate-100">
+                        <td className="py-1.5 text-slate-800">{b.categoryLabel}</td>
+                        <td className="py-1.5 text-right text-slate-600">
+                          {formatMoney(b.limitAmount, b.currency ?? base, currencies?.currencies)}
+                        </td>
+                        <td className="py-1.5 text-right text-slate-600">
+                          {formatMoney(spent, b.currency ?? base, currencies?.currencies)}
+                        </td>
+                        <td
+                          className={`py-1.5 text-right text-xs font-medium ${diff > 0
+                              ? "text-emerald-600"
+                              : diff === 0
+                                ? "text-amber-600"
+                                : "text-rose-600"
+                            }`}
+                        >
+                          {(b.limitAmount ?? 0) === 0
+                            ? "—"
+                            : diff > 0
+                              ? `${formatMoney(diff, b.currency ?? base, currencies?.currencies)} under`
+                              : diff === 0
+                                ? "On par"
+                                : `${formatMoney(Math.abs(diff), b.currency ?? base, currencies?.currencies)} over`}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </Card>
 
+        {/* Investments — share lots this month + total */}
         <Card
           title="Investments"
           subtitle="Share lots purchased this month"
@@ -384,70 +343,82 @@ export default function MonthDetailPage() {
           {shareLots.length === 0 ? (
             <p className="text-sm text-slate-500">No holdings added this month.</p>
           ) : (
-            <table className="w-full text-sm">
-              <thead className="text-xs uppercase text-slate-500">
-                <tr className="border-b border-slate-200">
-                  <th className="text-left py-1.5">Holding</th>
-                  <th className="text-right">Shares</th>
-                  <th className="text-right">Buy price</th>
-                  <th className="text-right">Total cost</th>
-                  <th className="text-left pl-2">Date</th>
-                  {!locked && <th className="text-right">Action</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {shareLots.map((lot) => {
-                  const inv = investments.find((i) => i.id === lot.investmentId);
-                  const shares = Number(lot.shares);
-                  const totalCost = Math.round(shares * lot.buyPricePerShare);
-                  return (
-                    <tr key={lot.id} className="border-b border-slate-100">
-                      <td className="py-1.5 text-slate-800">
-                        {inv?.name ?? `#${lot.investmentId}`}
-                        {inv?.ticker && (
-                          <span className="ml-1 text-xs text-slate-500">{inv.ticker}</span>
-                        )}
-                      </td>
-                      <td className="py-1.5 text-right text-slate-600">{String(lot.shares)}</td>
-                      <td className="py-1.5 text-right text-slate-600">
-                        {formatMoney(lot.buyPricePerShare, inv?.currency ?? "CAD", currencies?.currencies)}
-                      </td>
-                      <td className="py-1.5 text-right font-medium">
-                        {formatMoney(totalCost, inv?.currency ?? "CAD", currencies?.currencies)}
-                      </td>
-                      <td className="py-1.5 pl-2 text-slate-500 text-xs">{lot.purchasedDate}</td>
-                      {!locked && (
-                        <td className="py-1.5 text-right">
-                          <button
-                            className="text-rose-600 hover:text-rose-800 text-sm font-medium"
-                            onClick={async () => {
-                              if (!confirm("Delete this share lot?")) return;
-                              setBusy(true);
-                              try {
-                                await api.deleteShareLot(lot.id);
-                                await load();
-                              } finally {
-                                setBusy(false);
-                              }
-                            }}
-                            disabled={busy}
-                          >
-                            Delete
-                          </button>
+            <>
+              <div className="mb-3">
+                <p className="text-lg font-semibold text-slate-900">
+                  Total: {formatMoney(totalInvested, base, currencies?.currencies)}
+                </p>
+              </div>
+              <table className="w-full text-sm">
+                <thead className="text-xs uppercase text-slate-500">
+                  <tr className="border-b border-slate-200">
+                    <th className="text-left py-1.5">Holding</th>
+                    <th className="text-right">Shares</th>
+                    <th className="text-right">Buy price</th>
+                    <th className="text-right">Total cost</th>
+                    <th className="text-left pl-2">Date</th>
+                    {!locked && <th className="text-right">Action</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {shareLots.map((lot) => {
+                    const inv = investments.find((i) => i.id === lot.investmentId);
+                    const shares = Number(lot.shares);
+                    const totalCost = Math.round(shares * lot.pricePerShare);
+                    return (
+                      <tr key={lot.id} className="border-b border-slate-100">
+                        <td className="py-1.5 text-slate-800">
+                          {inv?.name ?? `#${lot.investmentId}`}
+                          {inv?.ticker && (
+                            <span className="ml-1 text-xs text-slate-500">{inv.ticker}</span>
+                          )}
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                        <td className="py-1.5 text-right text-slate-600">{String(lot.shares)}</td>
+                        <td className="py-1.5 text-right text-slate-600">
+                          {formatMoney(lot.pricePerShare, inv?.currency ?? "CAD", currencies?.currencies)}
+                        </td>
+                        <td className="py-1.5 text-right font-medium">
+                          {formatMoney(totalCost, inv?.currency ?? "CAD", currencies?.currencies)}
+                        </td>
+                        <td className="py-1.5 pl-2 text-slate-500 text-xs">{lot.purchasedDate}</td>
+                        {!locked && (
+                          <td className="py-1.5 text-right">
+                            <button
+                              className="text-rose-600 hover:text-rose-800 text-sm font-medium"
+                              onClick={async () => {
+                                if (!confirm("Delete this share lot?")) return;
+                                setBusy(true);
+                                try {
+                                  await api.deleteShareLot(lot.id);
+                                  await load();
+                                } finally {
+                                  setBusy(false);
+                                }
+                              }}
+                              disabled={busy}
+                            >
+                              Delete
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </>
           )}
         </Card>
       </div>
 
+      {/* Expenses — grouped by category with totals */}
       <Card
         title="Expenses"
-        subtitle="Manual entries (EMI-projected rows are read-only)"
+        subtitle={
+          totalExpenses > 0
+            ? `Total: ${formatMoney(totalExpenses, base, currencies?.currencies)}`
+            : "Expenses logged this month"
+        }
         actions={
           !locked && (
             <Button variant="secondary" onClick={() => setEditingExpense("new")}>
@@ -462,8 +433,11 @@ export default function MonthDetailPage() {
           <div className="flex gap-6 overflow-x-auto pb-2">
             {expensesByCategory.map((group) => (
               <div key={group.categoryId} className="min-w-[280px] flex-shrink-0">
-                <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 mb-3">
+                <div className="rounded-lg bg-indigo-50 border border-indigo-200 px-3 py-1.5 mb-3 flex justify-between items-center">
                   <span className="text-sm font-semibold text-indigo-700">{group.label}</span>
+                  <span className="text-xs font-medium text-indigo-600">
+                    {formatMoney(group.total, base, currencies?.currencies)}
+                  </span>
                 </div>
                 <div className="space-y-2">
                   {group.items.map((x) => (
@@ -513,9 +487,14 @@ export default function MonthDetailPage() {
         )}
       </Card>
 
+      {/* Income — simplified with single amount */}
       <Card
         title="Income"
-        subtitle="Money received this month"
+        subtitle={
+          totalIncome > 0
+            ? `Total: ${formatMoney(totalIncome, base, currencies?.currencies)}`
+            : "Money received this month"
+        }
         actions={
           !locked && (
             <Button variant="secondary" onClick={() => setEditingIncome("new")}>
@@ -532,10 +511,8 @@ export default function MonthDetailPage() {
               <tr className="border-b border-slate-200">
                 <th className="text-left py-1.5">Date</th>
                 <th className="text-left">Source</th>
-                <th className="text-left">Account</th>
-                <th className="text-right">Gross</th>
-                <th className="text-right">Net</th>
-                <th className="text-right">Action</th>
+                <th className="text-right">Amount</th>
+                {!locked && <th className="text-right">Action</th>}
               </tr>
             </thead>
             <tbody>
@@ -543,32 +520,26 @@ export default function MonthDetailPage() {
                 <tr key={i.id} className="border-b border-slate-100">
                   <td className="py-1.5 text-slate-700">{i.receivedDate}</td>
                   <td className="py-1.5 text-slate-800">{i.source}</td>
-                  <td className="py-1.5 text-slate-600">{accountName(i.accountId)}</td>
-                  <td className="py-1.5 text-right text-slate-600">
-                    {formatMoney(i.grossAmount, i.currency, currencies?.currencies)}
+                  <td className="py-1.5 text-right font-medium text-emerald-700">
+                    {formatMoney(i.amount, i.currency, currencies?.currencies)}
                   </td>
-                  <td className="py-1.5 text-right">
-                    {formatMoney(i.netAmount, i.currency, currencies?.currencies)}
-                  </td>
-                  <td className="py-1.5 text-right">
-                    {!locked && (
-                      <>
-                        <button
-                          className="text-slate-700 hover:text-slate-900 text-sm font-medium mr-3"
-                          onClick={() => setEditingIncome(i)}
-                        >
-                          Edit
-                        </button>
-                        <button
-                          className="text-rose-600 hover:text-rose-800 text-sm font-medium"
-                          onClick={() => deleteIncome(i.id)}
-                          disabled={busy}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </td>
+                  {!locked && (
+                    <td className="py-1.5 text-right">
+                      <button
+                        className="text-slate-700 hover:text-slate-900 text-sm font-medium mr-3"
+                        onClick={() => setEditingIncome(i)}
+                      >
+                        Edit
+                      </button>
+                      <button
+                        className="text-rose-600 hover:text-rose-800 text-sm font-medium"
+                        onClick={() => deleteIncome(i.id)}
+                        disabled={busy}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -576,10 +547,9 @@ export default function MonthDetailPage() {
         )}
       </Card>
 
-      <Card title="EMIs due this month" subtitle="Installments scheduled for this month">
-        {installments.length === 0 ? (
-          <p className="text-sm text-slate-500">No EMI installments due this month.</p>
-        ) : (
+      {/* EMIs due this month */}
+      {installments.length > 0 && (
+        <Card title="EMIs due this month" subtitle="Installments scheduled for this month">
           <table className="w-full text-sm">
             <thead className="text-xs uppercase text-slate-500">
               <tr className="border-b border-slate-200">
@@ -587,7 +557,6 @@ export default function MonthDetailPage() {
                 <th className="text-left">Seq</th>
                 <th className="text-right">Amount</th>
                 <th className="text-center">Status</th>
-                <th className="text-right">Action</th>
               </tr>
             </thead>
             <tbody>
@@ -613,23 +582,12 @@ export default function MonthDetailPage() {
                       {i.status}
                     </Badge>
                   </td>
-                  <td className="py-1.5 text-right">
-                    {!locked && i.status === "PROJECTED" && (
-                      <Button
-                        variant="ghost"
-                        onClick={() => skipInstallment(i.id)}
-                        disabled={busy}
-                      >
-                        Skip
-                      </Button>
-                    )}
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
-        )}
-      </Card>
+        </Card>
+      )}
 
       {editingExpense && (
         <ExpenseEditor
@@ -794,21 +752,14 @@ function IncomeEditor({
   onClose: () => void;
   onSaved: () => void | Promise<void>;
 }) {
-  const { accounts, currencies } = useApp();
+  const { currencies } = useApp();
   const today = new Date().toISOString().slice(0, 10);
-  const defaultAccount = accounts[0];
-  const [source, setSource] = useState(initial?.source ?? INCOME_SOURCES[0]);
-  const [accountId, setAccountId] = useState<number | null>(
-    initial?.accountId ?? defaultAccount?.id ?? null,
-  );
+  const [source, setSource] = useState(initial?.source ?? "");
   const [currency, setCurrency] = useState(
-    initial?.currency ?? defaultAccount?.currency ?? currencies?.currencies[0]?.code ?? "CAD",
+    initial?.currency ?? currencies?.currencies[0]?.code ?? "CAD",
   );
-  const [gross, setGross] = useState(
-    initial ? fromMinor(initial.grossAmount, initial.currency, currencies?.currencies) : "",
-  );
-  const [net, setNet] = useState(
-    initial ? fromMinor(initial.netAmount, initial.currency, currencies?.currencies) : "",
+  const [amount, setAmount] = useState(
+    initial ? fromMinor(initial.amount, initial.currency, currencies?.currencies) : "",
   );
   const [receivedDate, setReceivedDate] = useState(initial?.receivedDate ?? today);
   const [weekOfMonth, setWeekOfMonth] = useState<string>(
@@ -818,21 +769,18 @@ function IncomeEditor({
   const [error, setError] = useState<string | null>(null);
 
   async function submit() {
-    if (!source.trim() || !gross || !net) {
-      setError("Source, gross and net amounts are required.");
+    if (!source.trim() || !amount) {
+      setError("Source and amount are required.");
       return;
     }
-    const grossMinor = toMinor(gross, currency, currencies?.currencies);
-    const netMinor = toMinor(net, currency, currencies?.currencies);
-    if (grossMinor == null || netMinor == null) {
-      setError("Amounts must be valid numbers.");
+    const amountMinor = toMinor(amount, currency, currencies?.currencies);
+    if (amountMinor == null) {
+      setError("Amount must be a valid number.");
       return;
     }
     const body: IncomeEntryRequest = {
-      accountId: accountId ?? null,
       source: source.trim(),
-      grossAmount: grossMinor,
-      netAmount: netMinor,
+      amount: amountMinor,
       currency,
       receivedDate,
       weekOfMonth: weekOfMonth ? Number(weekOfMonth) : null,
@@ -859,24 +807,14 @@ function IncomeEditor({
         <div className="col-span-2">
           <Label>Source</Label>
           <Input
-            list="income-source-options"
             value={source}
             onChange={(e) => setSource(e.target.value)}
-            placeholder="Pick a preset or type your own"
+            placeholder="e.g. Salary, Bonus, etc."
           />
-          <datalist id="income-source-options">
-            {INCOME_SOURCES.map((s) => (
-              <option key={s} value={s} />
-            ))}
-          </datalist>
         </div>
         <div>
-          <Label>Gross amount</Label>
-          <Input inputMode="decimal" value={gross} onChange={(e) => setGross(e.target.value)} />
-        </div>
-        <div>
-          <Label>Net amount</Label>
-          <Input inputMode="decimal" value={net} onChange={(e) => setNet(e.target.value)} />
+          <Label>Amount</Label>
+          <Input inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} />
         </div>
         <div>
           <Label>Currency</Label>
@@ -884,22 +822,6 @@ function IncomeEditor({
             {(currencies?.currencies ?? []).map((c) => (
               <option key={c.code} value={c.code}>
                 {c.code}
-              </option>
-            ))}
-          </Select>
-        </div>
-        <div>
-          <Label>Deposit account</Label>
-          <Select
-            value={accountId ?? ""}
-            onChange={(e) =>
-              setAccountId(e.target.value === "" ? null : Number(e.target.value))
-            }
-          >
-            <option value="">— none —</option>
-            {accounts.map((a) => (
-              <option key={a.id} value={a.id}>
-                {a.name} ({a.currency})
               </option>
             ))}
           </Select>
@@ -939,7 +861,7 @@ function IncomeEditor({
   );
 }
 
-const INVESTMENT_TYPES = ["ETF", "STOCK", "MF", "CRYPTO", "BOND"];
+const INVESTMENT_TYPES = ["OTHER", "ETF", "STOCK", "MF", "CRYPTO", "BOND", "PPF", "RRSP", "FHSA"];
 
 function AddHoldingModal({
   monthId,
@@ -1014,7 +936,7 @@ function AddHoldingModal({
       await api.createShareLot(monthId, {
         investmentId: targetId,
         shares: sharesNum,
-        buyPricePerShare: buyMinor,
+        pricePerShare: buyMinor,
         purchasedDate,
       });
 

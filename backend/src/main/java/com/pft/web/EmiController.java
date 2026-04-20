@@ -1,7 +1,6 @@
 package com.pft.web;
 
 import com.pft.service.EmiService;
-import com.pft.web.dto.Dtos.EmiInstallmentDto;
 import com.pft.web.dto.Dtos.EmiPlanDto;
 import com.pft.web.dto.Dtos.EmiPlanRequest;
 import jakarta.validation.Valid;
@@ -39,8 +38,8 @@ public class EmiController {
         return emi.cancelPlan(id);
     }
 
-    @PostMapping("/installments/{id}/skip")
-    public EmiInstallmentDto skipInstallment(@PathVariable Long id) {
-        return emi.skipInstallment(id);
+    @PostMapping("/plans/{id}/early-payoff")
+    public EmiPlanDto earlyPayoff(@PathVariable Long id, @RequestParam Long monthId) {
+        return emi.earlyPayoff(id, monthId);
     }
 }

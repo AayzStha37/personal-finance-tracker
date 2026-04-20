@@ -25,11 +25,8 @@ public class IncomeEntry {
     @Column(name = "source", nullable = false)
     private String source;
 
-    @Column(name = "gross_amount", nullable = false)
-    private long grossAmount;
-
-    @Column(name = "net_amount", nullable = false)
-    private long netAmount;
+    @Column(name = "amount", nullable = false)
+    private long amount;
 
     @Column(name = "currency", nullable = false)
     private String currency;

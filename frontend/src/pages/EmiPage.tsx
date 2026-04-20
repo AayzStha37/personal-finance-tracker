@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { api, HttpError } from "../api/client";
-import type { CurrencyDto, EmiPlanDto, EmiPlanRequest } from "../api/types";
+import type { CurrencyDto, EmiPlanDto, EmiPlanRequest, MonthDto } from "../api/types";
 import { Badge, Button, Card, Input, Label, Modal, Select } from "../components/ui";
 import { formatMoney, monthLabel, toMinor } from "../lib/money";
 import { useApp } from "../state/AppContext";
@@ -8,6 +8,7 @@ import { useApp } from "../state/AppContext";
 export default function EmiPage() {
   const { accounts, categories, currencies } = useApp();
   const [plans, setPlans] = useState<EmiPlanDto[]>([]);
+  const [currentMonth, setCurrentMonth] = useState<MonthDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
@@ -18,7 +19,12 @@ export default function EmiPage() {
     setLoading(true);
     setError(null);
     try {
-      setPlans(await api.listEmiPlans());
+      const [p, m] = await Promise.all([
+        api.listEmiPlans(),
+        api.getCurrentMonth(),
+      ]);
+      setPlans(p);
+      setCurrentMonth(m);
     } catch (e) {
       setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
     } finally {
@@ -45,10 +51,26 @@ export default function EmiPage() {
     }
   }
 
-  async function skip(instId: number) {
+  async function earlyPayoff(planId: number) {
+    if (!currentMonth) {
+      setError("No active month found. Create or activate a month first.");
+      return;
+    }
+    const plan = plans.find((p) => p.id === planId);
+    const remaining = plan?.installments.filter((i) => i.status === "PROJECTED").length ?? 0;
+    const remainingAmount = plan?.installments
+      .filter((i) => i.status === "PROJECTED")
+      .reduce((s, i) => s + i.amount, 0) ?? 0;
+    if (
+      !confirm(
+        `Pay off ${remaining} remaining installment(s) (${formatMoney(remainingAmount, plan?.currency ?? "CAD", currencies?.currencies)}) as a lump sum in ${monthLabel(currentMonth.year, currentMonth.month)}?`,
+      )
+    ) {
+      return;
+    }
     setBusy(true);
     try {
-      await api.skipEmiInstallment(instId);
+      await api.earlyPayoffEmiPlan(planId, currentMonth.id);
       await load();
     } catch (e) {
       setError(e instanceof HttpError ? e.message : e instanceof Error ? e.message : String(e));
@@ -82,7 +104,6 @@ export default function EmiPage() {
             {plans.map((p) => {
               const paid = p.installments.filter((i) => i.status === "PAID").length;
               const projected = p.installments.filter((i) => i.status === "PROJECTED").length;
-              const skipped = p.installments.filter((i) => i.status === "SKIPPED").length;
               const isOpen = expanded === p.id;
               return (
                 <div
@@ -104,14 +125,25 @@ export default function EmiPage() {
                       </div>
                       <p className="text-xs text-slate-500 mt-0.5">
                         {formatMoney(p.installmentAmount, p.currency, currencies?.currencies)} ×{" "}
-                        {p.totalInstallments} · paid {paid} · upcoming {projected} · skipped{" "}
-                        {skipped}
+                        {p.totalInstallments} · paid {paid} · upcoming {projected}
                       </p>
                     </div>
                     <div className="flex items-center gap-3 shrink-0">
                       <span className="text-xs text-slate-400">
                         {isOpen ? "Hide" : "Show"} installments
                       </span>
+                      {p.active && projected > 0 && (
+                        <Button
+                          variant="secondary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            void earlyPayoff(p.id);
+                          }}
+                          disabled={busy}
+                        >
+                          Early payoff
+                        </Button>
+                      )}
                       {p.active && (
                         <Button
                           variant="ghost"
@@ -135,7 +167,6 @@ export default function EmiPage() {
                             <th className="text-left">Due month</th>
                             <th className="text-right">Amount</th>
                             <th className="text-center">Status</th>
-                            <th className="text-right">Action</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -164,17 +195,6 @@ export default function EmiPage() {
                                 >
                                   {i.status}
                                 </Badge>
-                              </td>
-                              <td className="py-1.5 text-right">
-                                {i.status === "PROJECTED" && (
-                                  <Button
-                                    variant="ghost"
-                                    onClick={() => skip(i.id)}
-                                    disabled={busy}
-                                  >
-                                    Skip
-                                  </Button>
-                                )}
                               </td>
                             </tr>
                           ))}

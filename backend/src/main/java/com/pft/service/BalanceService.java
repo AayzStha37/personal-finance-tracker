@@ -37,9 +37,7 @@ public class BalanceService {
         Map<Long, Account> byId = accountsById();
         return snapshots.findAllByMonthId(monthId).stream()
                 .map(s -> toDto(s, byId))
-                .sorted((a, b) -> Integer.compare(
-                        byId.get(a.accountId()).getDisplayOrder(),
-                        byId.get(b.accountId()).getDisplayOrder()))
+                .sorted((a, b) -> Long.compare(a.accountId(), b.accountId()))
                 .toList();
     }
 

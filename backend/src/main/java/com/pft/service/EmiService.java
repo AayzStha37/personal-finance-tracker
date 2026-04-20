@@ -134,19 +134,55 @@ public class EmiService {
         return rows.stream().map(i -> toDto(i, planMap, monthMap)).toList();
     }
 
-    public EmiInstallmentDto skipInstallment(Long id) {
-        EmiInstallment inst = installments.findById(id).orElseThrow(
-                () -> new NotFoundException("Installment " + id + " not found"));
-        lockGuard.requireWritable(inst.getDueMonthId());
-        if (inst.getExpenseEntryId() != null) {
-            expenses.deleteById(inst.getExpenseEntryId());
-            inst.setExpenseEntryId(null);
+    /**
+     * Pay off all remaining PROJECTED installments of a plan as a lump sum
+     * in the given month. Each remaining installment is linked to a single
+     * expense entry for the total outstanding amount.
+     */
+    public EmiPlanDto earlyPayoff(Long planId, Long monthId) {
+        EmiPlan plan = requirePlan(planId);
+        if (!plan.isActive()) {
+            throw new ConflictException("Plan is not active");
         }
-        inst.setStatus(InstallmentStatus.SKIPPED);
-        EmiInstallment saved = installments.save(inst);
-        EmiPlan plan = requirePlan(saved.getPlanId());
-        Month m = months.findById(saved.getDueMonthId()).orElse(null);
-        return toDto(saved, plan, m);
+        lockGuard.requireWritable(monthId);
+        Month month = months.findById(monthId).orElseThrow(
+                () -> new BadRequestException("Month " + monthId + " not found"));
+
+        List<EmiInstallment> remaining = installments.findAllByPlanIdOrderBySeqNoAsc(plan.getId())
+                .stream()
+                .filter(i -> i.getStatus() == InstallmentStatus.PROJECTED)
+                .toList();
+        if (remaining.isEmpty()) {
+            throw new BadRequestException("No remaining installments to pay off");
+        }
+
+        long totalAmount = remaining.stream().mapToLong(EmiInstallment::getAmount).sum();
+
+        // Create one lump-sum expense for the entire remaining balance
+        java.time.LocalDate txDate = java.time.LocalDate.of(month.getYear(), month.getMonth(), 1);
+        ExpenseEntry e = expenses.save(ExpenseEntry.builder()
+                .monthId(monthId)
+                .categoryId(plan.getCategoryId())
+                .description("EMI early payoff: " + plan.getLabel()
+                        + " (" + remaining.size() + " installments)")
+                .amount(totalAmount)
+                .currency(plan.getCurrency())
+                .txDate(txDate.toString())
+                .emiInstallmentId(remaining.get(0).getId())
+                .build());
+
+        // Mark all remaining installments as PAID, link first one to the expense
+        for (int i = 0; i < remaining.size(); i++) {
+            EmiInstallment inst = remaining.get(i);
+            inst.setStatus(InstallmentStatus.PAID);
+            if (i == 0) inst.setExpenseEntryId(e.getId());
+            installments.save(inst);
+        }
+
+        plan.setActive(false);
+        plans.save(plan);
+
+        return toDto(plan);
     }
 
     // ---- Month-init hook ----------------------------------------------

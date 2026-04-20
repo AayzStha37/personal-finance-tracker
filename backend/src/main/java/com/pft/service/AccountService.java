@@ -26,7 +26,7 @@ public class AccountService {
 
     @Transactional(readOnly = true)
     public List<AccountDto> list() {
-        return accounts.findAllByOrderByDisplayOrderAscIdAsc().stream()
+        return accounts.findAllByOrderByIdAsc().stream()
                 .map(AccountService::toDto).toList();
     }
 
@@ -37,7 +37,6 @@ public class AccountService {
                 .kind(req.kind())
                 .currency(req.currency())
                 .active(req.active() == null || req.active())
-                .displayOrder(req.displayOrder() == null ? 0 : req.displayOrder())
                 .build();
         return toDto(accounts.save(a));
     }
@@ -50,7 +49,6 @@ public class AccountService {
         a.setKind(req.kind());
         a.setCurrency(req.currency());
         if (req.active() != null) a.setActive(req.active());
-        if (req.displayOrder() != null) a.setDisplayOrder(req.displayOrder());
         return toDto(accounts.save(a));
     }
 
@@ -69,6 +67,6 @@ public class AccountService {
 
     static AccountDto toDto(Account a) {
         return new AccountDto(a.getId(), a.getName(), a.getKind(), a.getCurrency(),
-                a.isActive(), a.getDisplayOrder());
+                a.isActive());
     }
 }

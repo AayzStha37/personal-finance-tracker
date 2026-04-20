@@ -55,15 +55,14 @@ public final class Dtos {
 
     public record AccountDto(
             Long id, String name, AccountKind kind, String currency,
-            boolean active, int displayOrder) {
+            boolean active) {
     }
 
     public record AccountRequest(
             @NotBlank String name,
             @NotNull  AccountKind kind,
             @NotBlank String currency,
-            Boolean active,
-            Integer displayOrder) {
+            Boolean active) {
     }
 
     // ---- Balances --------------------------------------------------------
@@ -126,33 +125,21 @@ public final class Dtos {
 
     public record ShareLotDto(
             Long id, Long investmentId, Long monthId,
-            BigDecimal shares, long buyPricePerShare, String purchasedDate) {
+            String lotType,
+            BigDecimal shares, long pricePerShare, String purchasedDate) {
     }
 
     public record ShareLotRequest(
             @NotNull Long investmentId,
+            @Pattern(regexp = "BUY|SELL") String lotType,
             @NotNull @DecimalMin("0.0001") BigDecimal shares,
-            @NotNull @Positive Long buyPricePerShare,
+            @NotNull @Positive Long pricePerShare,
             @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String purchasedDate) {
     }
 
     // ---- Currencies ------------------------------------------------------
 
     public record CurrencyDto(String code, String symbol, int decimals) {
-    }
-
-    // ---- Exchange rates --------------------------------------------------
-
-    public record ExchangeRateDto(
-            Long id, String fromCurrency, String toCurrency,
-            BigDecimal rate, String effectiveMonth, String source, String fetchedAt) {
-    }
-
-    public record ExchangeRateUpsert(
-            @NotBlank String fromCurrency,
-            @NotBlank String toCurrency,
-            @NotNull @Positive BigDecimal rate,
-            @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}") String effectiveMonth) {
     }
 
     // ---- EMI plans & installments ---------------------------------------
@@ -203,15 +190,14 @@ public final class Dtos {
 
     public record IncomeEntryDto(
             Long id, Long monthId, Long accountId, String source,
-            long grossAmount, long netAmount, String currency,
+            long amount, String currency,
             String receivedDate, Integer weekOfMonth) {
     }
 
     public record IncomeEntryRequest(
             Long accountId,
             @NotBlank String source,
-            @NotNull @PositiveOrZero Long grossAmount,
-            @NotNull @PositiveOrZero Long netAmount,
+            @NotNull @PositiveOrZero Long amount,
             @NotBlank String currency,
             @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String receivedDate,
             @Min(1) @Max(6) Integer weekOfMonth) {

@@ -28,7 +28,4 @@ public class Account {
 
     @Column(name = "active", nullable = false)
     private boolean active;
-
-    @Column(name = "display_order", nullable = false)
-    private int displayOrder;
 }

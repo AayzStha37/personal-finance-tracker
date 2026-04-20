@@ -21,14 +21,18 @@ public class ShareLot {
     @Column(name = "investment_id", nullable = false)
     private Long investmentId;
 
-    @Column(name = "month_id", nullable = false)
+    @Column(name = "month_id")
     private Long monthId;
+
+    @Column(name = "lot_type", nullable = false)
+    @Builder.Default
+    private String lotType = "BUY";
 
     @Column(name = "shares", nullable = false)
     private BigDecimal shares;
 
-    @Column(name = "buy_price_per_share", nullable = false)
-    private long buyPricePerShare;
+    @Column(name = "price_per_share", nullable = false)
+    private long pricePerShare;
 
     @Column(name = "purchased_date", nullable = false)
     private String purchasedDate;

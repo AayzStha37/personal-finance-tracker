@@ -7,7 +7,7 @@ import java.util.List;
 
 public interface AccountRepository extends JpaRepository<Account, Long> {
 
-    List<Account> findAllByActiveTrueOrderByDisplayOrderAscIdAsc();
+    List<Account> findAllByActiveTrueOrderByIdAsc();
 
-    List<Account> findAllByOrderByDisplayOrderAscIdAsc();
+    List<Account> findAllByOrderByIdAsc();
 }

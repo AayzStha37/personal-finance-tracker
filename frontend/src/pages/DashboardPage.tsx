@@ -170,11 +170,11 @@ function OverviewCards({
   const totalSpent = sumBy(expenses, (e) => e.amount);
   const budgetDiff = totalBudget - totalSpent;
 
-  const totalInvested = sumBy(shareLots, (l) => Math.round(Number(l.shares) * l.buyPricePerShare));
-  const prevInvested = sumBy(prevShareLots, (l) => Math.round(Number(l.shares) * l.buyPricePerShare));
+  const totalInvested = sumBy(shareLots, (l) => Math.round(Number(l.shares) * l.pricePerShare));
+  const prevInvested = sumBy(prevShareLots, (l) => Math.round(Number(l.shares) * l.pricePerShare));
   const investDelta = totalInvested - prevInvested;
 
-  const totalIncome = sumBy(incomes, (i) => i.netAmount);
+  const totalIncome = sumBy(incomes, (i) => i.amount);
   const totalExpense = sumBy(expenses, (e) => e.amount);
 
   return (
@@ -289,7 +289,7 @@ function SavingsChart({
   // Filter to active BANK + CASH accounts
   const eligibleIds = new Set(
     accounts
-      .filter((a) => a.active && (a.kind === "BANK" || a.kind === "CASH"))
+      .filter((a) => a.active && (a.kind === "BANK_CHQ" || a.kind === "BANK_SVG" || a.kind === "CASH"))
       .map((a) => a.id),
   );
 
@@ -494,7 +494,7 @@ function BudgetCard({
 function IncomeCard({ incomes }: { incomes: IncomeEntryDto[] }) {
   const { currencies } = useApp();
   const base = currencies?.base ?? "CAD";
-  const total = sumBy(incomes, (i) => i.netAmount);
+  const total = sumBy(incomes, (i) => i.amount);
 
   return (
     <Card title="Income" subtitle="Net income received this month.">
@@ -519,7 +519,7 @@ function IncomeCard({ incomes }: { incomes: IncomeEntryDto[] }) {
                   <td className="py-1.5 text-slate-800">{i.source}</td>
                   <td className="py-1.5 text-right text-slate-500 text-xs">{i.receivedDate}</td>
                   <td className="py-1.5 text-right text-emerald-700 font-medium">
-                    {formatMoney(i.netAmount, i.currency, currencies?.currencies)}
+                    {formatMoney(i.amount, i.currency, currencies?.currencies)}
                   </td>
                 </tr>
               ))}

@@ -14,6 +14,7 @@ import com.pft.web.dto.Dtos.ShareLotRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Service
@@ -93,11 +94,33 @@ public class InvestmentService {
     public ShareLotDto createLot(Long monthId, ShareLotRequest req) {
         lockGuard.requireWritable(monthId);
         requireInvestment(req.investmentId());
+        String lotType = req.lotType() != null ? req.lotType() : "BUY";
+        if ("SELL".equals(lotType)) {
+            validateSellQuantity(req.investmentId(), req.shares());
+        }
         ShareLot lot = ShareLot.builder()
                 .investmentId(req.investmentId())
                 .monthId(monthId)
+                .lotType(lotType)
                 .shares(req.shares())
-                .buyPricePerShare(req.buyPricePerShare())
+                .pricePerShare(req.pricePerShare())
+                .purchasedDate(req.purchasedDate())
+                .build();
+        return toLotDto(shareLots.save(lot));
+    }
+
+    public ShareLotDto createLegacyLot(ShareLotRequest req) {
+        requireInvestment(req.investmentId());
+        String lotType = req.lotType() != null ? req.lotType() : "BUY";
+        if ("SELL".equals(lotType)) {
+            validateSellQuantity(req.investmentId(), req.shares());
+        }
+        ShareLot lot = ShareLot.builder()
+                .investmentId(req.investmentId())
+                .monthId(null)
+                .lotType(lotType)
+                .shares(req.shares())
+                .pricePerShare(req.pricePerShare())
                 .purchasedDate(req.purchasedDate())
                 .build();
         return toLotDto(shareLots.save(lot));
@@ -106,11 +129,29 @@ public class InvestmentService {
     public void deleteLot(Long lotId) {
         ShareLot lot = shareLots.findById(lotId).orElseThrow(
                 () -> new NotFoundException("Share lot " + lotId + " not found"));
-        lockGuard.requireWritable(lot.getMonthId());
+        if (lot.getMonthId() != null) {
+            lockGuard.requireWritable(lot.getMonthId());
+        }
         shareLots.delete(lot);
     }
 
     // ---- Helpers -------------------------------------------------------------
+
+    private void validateSellQuantity(Long investmentId, BigDecimal sellShares) {
+        List<ShareLot> allLots = shareLots.findAllByInvestmentId(investmentId);
+        BigDecimal netShares = BigDecimal.ZERO;
+        for (ShareLot lot : allLots) {
+            if ("BUY".equals(lot.getLotType())) {
+                netShares = netShares.add(lot.getShares());
+            } else {
+                netShares = netShares.subtract(lot.getShares());
+            }
+        }
+        if (netShares.compareTo(sellShares) < 0) {
+            throw new BadRequestException("Cannot sell " + sellShares
+                    + " shares; only " + netShares + " available");
+        }
+    }
 
     private Investment requireInvestment(Long id) {
         return investments.findById(id).orElseThrow(
@@ -124,6 +165,6 @@ public class InvestmentService {
 
     static ShareLotDto toLotDto(ShareLot s) {
         return new ShareLotDto(s.getId(), s.getInvestmentId(), s.getMonthId(),
-                s.getShares(), s.getBuyPricePerShare(), s.getPurchasedDate());
+                s.getLotType(), s.getShares(), s.getPricePerShare(), s.getPurchasedDate());
     }
 }

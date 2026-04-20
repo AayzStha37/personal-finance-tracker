@@ -45,8 +45,7 @@ public class IncomeService {
                 .monthId(monthId)
                 .accountId(req.accountId())
                 .source(req.source())
-                .grossAmount(req.grossAmount())
-                .netAmount(req.netAmount())
+                .amount(req.amount())
                 .currency(req.currency())
                 .receivedDate(req.receivedDate())
                 .weekOfMonth(req.weekOfMonth())
@@ -60,8 +59,7 @@ public class IncomeService {
         validateRefs(req);
         e.setAccountId(req.accountId());
         e.setSource(req.source());
-        e.setGrossAmount(req.grossAmount());
-        e.setNetAmount(req.netAmount());
+        e.setAmount(req.amount());
         e.setCurrency(req.currency());
         e.setReceivedDate(req.receivedDate());
         e.setWeekOfMonth(req.weekOfMonth());
@@ -91,7 +89,7 @@ public class IncomeService {
     static IncomeEntryDto toDto(IncomeEntry e) {
         return new IncomeEntryDto(
                 e.getId(), e.getMonthId(), e.getAccountId(), e.getSource(),
-                e.getGrossAmount(), e.getNetAmount(), e.getCurrency(),
+                e.getAmount(), e.getCurrency(),
                 e.getReceivedDate(), e.getWeekOfMonth());
     }
 }

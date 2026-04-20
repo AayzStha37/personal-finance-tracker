@@ -4,6 +4,7 @@ import com.pft.service.InvestmentService;
 import com.pft.web.dto.Dtos.InvestmentDto;
 import com.pft.web.dto.Dtos.InvestmentRequest;
 import com.pft.web.dto.Dtos.ShareLotDto;
+import com.pft.web.dto.Dtos.ShareLotRequest;
 import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -44,6 +45,11 @@ public class InvestmentController {
     @GetMapping("/{id}/lots")
     public List<ShareLotDto> listLots(@PathVariable Long id) {
         return investments.listLotsByInvestment(id);
+    }
+
+    @PostMapping("/lots")
+    public ShareLotDto createLegacyLot(@RequestBody @Valid ShareLotRequest req) {
+        return investments.createLegacyLot(req);
     }
 
     @DeleteMapping("/lots/{lotId}")

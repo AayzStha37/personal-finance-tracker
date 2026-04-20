@@ -44,7 +44,7 @@ class ApiIntegrationTest {
     void fullLifecycle() throws Exception {
         // --- seed: account + category lookup ---------------------------------
         long accountId = postJson("/api/accounts", """
-                {"name":"Test Bank","kind":"BANK","currency":"CAD"}
+                {"name":"Test Bank","kind":"BANK_SVG","currency":"CAD"}
                 """).get("id").asLong();
 
         JsonNode cats = getJson("/api/budget-categories");
@@ -134,8 +134,8 @@ class ApiIntegrationTest {
 
         // --- income CRUD on May ---------------------------------------------
         long incId = postJson("/api/months/" + mayId + "/incomes", """
-                {"accountId":%d,"source":"MOMO Business",
-                 "grossAmount":50000,"netAmount":48000,"currency":"CAD",
+                {"source":"MOMO Business",
+                 "amount":48000,"currency":"CAD",
                  "receivedDate":"2026-05-15","weekOfMonth":3}
                 """.formatted(accountId)).get("id").asLong();
 
@@ -158,10 +158,10 @@ class ApiIntegrationTest {
         mvc.perform(post("/api/months/" + aprilId + "/incomes")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"accountId":%d,"source":"Salary",
-                                 "grossAmount":100,"netAmount":100,"currency":"CAD",
+                                {"source":"Salary",
+                                 "amount":100,"currency":"CAD",
                                  "receivedDate":"2026-04-15"}
-                                """.formatted(accountId)))
+                                """))
                 .andExpect(status().isConflict());
 
         // --- lock can't be re-applied: already LOCKED returns 409 -----------
@@ -190,14 +190,15 @@ class ApiIntegrationTest {
                 {"name":"VFV","ticker":"VFV.TO","type":"ETF","currency":"CAD"}
                 """, 200);
 
-        // --- Share lots: create on ACTIVE month (May) -----------------------
+        // --- Share lots: create BUY on ACTIVE month (May) --------------------
         JsonNode lot = postJson("/api/months/" + mayId + "/share-lots", """
-                {"investmentId":%d,"shares":10.5,"buyPricePerShare":5000,"purchasedDate":"2026-05-10"}
+                {"investmentId":%d,"shares":10.5,"pricePerShare":5000,"purchasedDate":"2026-05-10"}
                 """.formatted(invId));
         long lotId = lot.get("id").asLong();
         assertThat(lot.get("investmentId").asLong()).isEqualTo(invId);
         assertThat(lot.get("shares").decimalValue().doubleValue()).isEqualTo(10.5);
-        assertThat(lot.get("buyPricePerShare").asLong()).isEqualTo(5000);
+        assertThat(lot.get("pricePerShare").asLong()).isEqualTo(5000);
+        assertThat(lot.get("lotType").asText()).isEqualTo("BUY");
 
         // list lots by investment
         JsonNode lotsByInv = getJson("/api/investments/" + invId + "/lots");
@@ -207,11 +208,43 @@ class ApiIntegrationTest {
         JsonNode lotsByMonth = getJson("/api/months/" + mayId + "/share-lots");
         assertThat(lotsByMonth).hasSize(1);
 
+        // --- Share lots: SELL on ACTIVE month -------------------------------
+        JsonNode sellLot = postJson("/api/months/" + mayId + "/share-lots", """
+                {"investmentId":%d,"lotType":"SELL","shares":3,"pricePerShare":6000,"purchasedDate":"2026-05-15"}
+                """.formatted(invId));
+        long sellLotId = sellLot.get("id").asLong();
+        assertThat(sellLot.get("lotType").asText()).isEqualTo("SELL");
+
+        // --- Sell more than owned fails (400) --------------------------------
+        mvc.perform(post("/api/months/" + mayId + "/share-lots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"investmentId":%d,"lotType":"SELL","shares":100,"pricePerShare":6000,"purchasedDate":"2026-05-15"}
+                                """.formatted(invId)))
+                .andExpect(status().isBadRequest());
+
+        // clean up sell lot
+        mvc.perform(delete("/api/investments/lots/" + sellLotId))
+                .andExpect(status().isNoContent());
+
+        // --- Legacy lot (no month) ------------------------------------------
+        JsonNode legacyLot = postJson("/api/investments/lots", """
+                {"investmentId":%d,"lotType":"BUY","shares":5,"pricePerShare":4000,"purchasedDate":"2025-01-15"}
+                """.formatted(invId));
+        long legacyLotId = legacyLot.get("id").asLong();
+        assertThat(legacyLot.get("monthId")).isNotNull();
+        assertThat(legacyLot.get("monthId").isNull()).isTrue();
+        assertThat(legacyLot.get("lotType").asText()).isEqualTo("BUY");
+
+        // delete legacy lot (no lock guard issue)
+        mvc.perform(delete("/api/investments/lots/" + legacyLotId))
+                .andExpect(status().isNoContent());
+
         // --- Share lots: create on LOCKED month fails -----------------------
         mvc.perform(post("/api/months/" + aprilId + "/share-lots")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
-                                {"investmentId":%d,"shares":5,"buyPricePerShare":5000,"purchasedDate":"2026-04-10"}
+                                {"investmentId":%d,"shares":5,"pricePerShare":5000,"purchasedDate":"2026-04-10"}
                                 """.formatted(invId)))
                 .andExpect(status().isConflict());
 
