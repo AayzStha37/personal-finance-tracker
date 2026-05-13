@@ -439,7 +439,7 @@ export default function MonthDetailPage() {
                     {formatMoney(group.total, base, currencies?.currencies)}
                   </span>
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
                   {group.items.map((x) => (
                     <div
                       key={x.id}
@@ -454,6 +454,11 @@ export default function MonthDetailPage() {
                                 <span className="ml-1">EMI</span>
                               </Badge>
                             )}
+                            {x.subscriptionPlanId != null && (
+                              <Badge variant="success">
+                                <span className="ml-1">SUB</span>
+                              </Badge>
+                            )}
                           </p>
                           <p className="text-xs text-slate-500 mt-0.5">{x.txDate}</p>
                         </div>
@@ -461,7 +466,7 @@ export default function MonthDetailPage() {
                           {formatMoney(x.amount, x.currency, currencies?.currencies)}
                         </span>
                       </div>
-                      {!locked && x.emiInstallmentId == null && (
+                      {!locked && x.emiInstallmentId == null && x.subscriptionPlanId == null && (
                         <div className="flex gap-3 mt-2 pt-2 border-t border-slate-200">
                           <button
                             className="text-xs font-medium text-slate-600 hover:text-slate-900"

@@ -7,6 +7,7 @@ import MonthDetailPage from "./pages/MonthDetailPage";
 import AccountsPage from "./pages/AccountsPage";
 import InvestmentsPage from "./pages/InvestmentsPage";
 import EmiPage from "./pages/EmiPage";
+import SubscriptionsPage from "./pages/SubscriptionsPage";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
             <Route path="accounts" element={<AccountsPage />} />
             <Route path="investments" element={<InvestmentsPage />} />
             <Route path="emi" element={<EmiPage />} />
+            <Route path="subscriptions" element={<SubscriptionsPage />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

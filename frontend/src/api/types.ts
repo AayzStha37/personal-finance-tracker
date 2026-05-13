@@ -192,6 +192,26 @@ export interface EmiPlanRequest {
   currency: string;
 }
 
+// ---- Subscriptions ---------------------------------------------------
+
+export interface SubscriptionPlanDto {
+  id: number;
+  label: string;
+  amount: number;
+  categoryId: number;
+  currency: string;
+  startMonthId: number;
+  active: boolean;
+}
+
+export interface SubscriptionPlanRequest {
+  label: string;
+  amount: number;
+  currency: string;
+  startYear: number;
+  startMonth: number;
+}
+
 // ---- Expense entries -------------------------------------------------
 
 export interface ExpenseEntryDto {
@@ -203,6 +223,7 @@ export interface ExpenseEntryDto {
   currency: string;
   txDate: string;
   emiInstallmentId: number | null;
+  subscriptionPlanId: number | null;
 }
 
 export interface ExpenseEntryRequest {

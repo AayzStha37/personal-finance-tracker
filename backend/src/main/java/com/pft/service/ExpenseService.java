@@ -103,6 +103,6 @@ public class ExpenseService {
         return new ExpenseEntryDto(
                 e.getId(), e.getMonthId(), e.getCategoryId(),
                 e.getDescription(), e.getAmount(), e.getCurrency(),
-                e.getTxDate(), e.getEmiInstallmentId());
+                e.getTxDate(), e.getEmiInstallmentId(), e.getSubscriptionPlanId());
     }
 }

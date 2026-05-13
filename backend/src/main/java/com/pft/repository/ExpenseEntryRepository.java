@@ -10,4 +10,8 @@ public interface ExpenseEntryRepository extends JpaRepository<ExpenseEntry, Long
     List<ExpenseEntry> findAllByMonthId(Long monthId);
 
     List<ExpenseEntry> findAllByMonthIdOrderByTxDateAscIdAsc(Long monthId);
+
+    void deleteByMonthId(Long monthId);
+
+    boolean existsBySubscriptionPlanIdAndMonthId(Long subscriptionPlanId, Long monthId);
 }

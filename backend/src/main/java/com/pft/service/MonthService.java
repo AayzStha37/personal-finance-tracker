@@ -21,26 +21,41 @@ public class MonthService {
     private final MonthlyBalanceSnapshotRepository balanceSnapshots;
     private final BudgetCategoryRepository categories;
     private final MonthlyBudgetRepository budgets;
+    private final ExpenseEntryRepository expenses;
+    private final IncomeEntryRepository incomes;
+    private final ShareLotRepository shareLots;
+    private final EmiInstallmentRepository emiInstallments;
     private final BalanceService balanceService;
     private final BudgetService budgetService;
     private final EmiService emiService;
+    private final SubscriptionService subscriptionService;
 
     public MonthService(MonthRepository months,
                         AccountRepository accounts,
                         MonthlyBalanceSnapshotRepository balanceSnapshots,
                         BudgetCategoryRepository categories,
                         MonthlyBudgetRepository budgets,
+                        ExpenseEntryRepository expenses,
+                        IncomeEntryRepository incomes,
+                        ShareLotRepository shareLots,
+                        EmiInstallmentRepository emiInstallments,
                         BalanceService balanceService,
                         BudgetService budgetService,
-                        EmiService emiService) {
+                        EmiService emiService,
+                        SubscriptionService subscriptionService) {
         this.months = months;
         this.accounts = accounts;
         this.balanceSnapshots = balanceSnapshots;
         this.categories = categories;
         this.budgets = budgets;
+        this.expenses = expenses;
+        this.incomes = incomes;
+        this.shareLots = shareLots;
+        this.emiInstallments = emiInstallments;
         this.balanceService = balanceService;
         this.budgetService = budgetService;
         this.emiService = emiService;
+        this.subscriptionService = subscriptionService;
     }
 
     // ---- Queries --------------------------------------------------------
@@ -95,10 +110,34 @@ public class MonthService {
         // concrete expense entries.
         emiService.materialiseForMonth(created);
 
+        // Project any active subscription plans into expense entries.
+        subscriptionService.materialiseForMonth(created);
+
         // Auto-compute integrity if we can.
         runIntegrity(created, previous);
 
         return summary(created.getId());
+    }
+
+    // ---- Delete ---------------------------------------------------------
+
+    /**
+     * Delete a month and all its associated data.
+     * Locked months cannot be deleted.
+     */
+    public void delete(Long id) {
+        Month m = requireMonth(id);
+        if (m.getStatus() == MonthStatus.LOCKED) {
+            throw new ConflictException("Locked months cannot be deleted");
+        }
+        // Cascade-delete all child data
+        emiInstallments.deleteByDueMonthId(id);
+        shareLots.deleteByMonthId(id);
+        expenses.deleteByMonthId(id);
+        incomes.deleteByMonthId(id);
+        budgets.deleteByMonthId(id);
+        balanceSnapshots.deleteByMonthId(id);
+        months.delete(m);
     }
 
     private void seedBalances(Month current, Optional<Month> previous) {
@@ -186,12 +225,6 @@ public class MonthService {
         Month m = requireMonth(id);
         if (m.getStatus() == MonthStatus.LOCKED) {
             throw new ConflictException("Locked months cannot be activated");
-        }
-        Optional<Month> previous = findPreviousTo(m.getYear(), m.getMonth());
-        IntegrityCheckDto check = runIntegrity(m, previous);
-        if (!check.ok()) {
-            throw new BadRequestException(
-                    "Integrity check failed: opening balances must match previous month's closing");
         }
         m.setStatus(MonthStatus.ACTIVE);
         return toDto(months.save(m));

@@ -23,6 +23,8 @@ import type {
   ShareLotRequest,
   MonthDto,
   MonthSummaryDto,
+  SubscriptionPlanDto,
+  SubscriptionPlanRequest,
 } from "./types";
 
 const BASE = "/api";
@@ -94,6 +96,8 @@ export const api = {
     request<IntegrityCheckDto>(`/months/${id}/integrity-check`, { method: "POST" }),
   listMonthEmiInstallments: (id: number) =>
     request<EmiInstallmentDto[]>(`/months/${id}/emi-installments`),
+  deleteMonth: (id: number) =>
+    request<void>(`/months/${id}`, { method: "DELETE" }),
 
   // Balances
   listBalances: (monthId: number) =>
@@ -179,6 +183,18 @@ export const api = {
     request<EmiPlanDto>(`/emi/plans/${id}/cancel`, { method: "POST" }),
   earlyPayoffEmiPlan: (planId: number, monthId: number) =>
     request<EmiPlanDto>(`/emi/plans/${planId}/early-payoff?monthId=${monthId}`, { method: "POST" }),
+
+  // Subscriptions
+  listSubscriptionPlans: () => request<SubscriptionPlanDto[]>("/subscriptions/plans"),
+  createSubscriptionPlan: (req: SubscriptionPlanRequest) =>
+    request<SubscriptionPlanDto>("/subscriptions/plans", {
+      method: "POST",
+      body: JSON.stringify(req),
+    }),
+  cancelSubscriptionPlan: (id: number) =>
+    request<SubscriptionPlanDto>(`/subscriptions/plans/${id}/cancel`, { method: "POST" }),
+  deleteSubscriptionPlan: (id: number) =>
+    request<void>(`/subscriptions/plans/${id}`, { method: "DELETE" }),
 
   // Expenses
   listExpenses: (monthId: number) =>

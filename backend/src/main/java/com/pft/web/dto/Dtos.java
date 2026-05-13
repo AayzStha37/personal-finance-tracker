@@ -175,7 +175,7 @@ public final class Dtos {
     public record ExpenseEntryDto(
             Long id, Long monthId, Long categoryId,
             String description, long amount, String currency,
-            String txDate, Long emiInstallmentId) {
+            String txDate, Long emiInstallmentId, Long subscriptionPlanId) {
     }
 
     public record ExpenseEntryRequest(
@@ -201,6 +201,22 @@ public final class Dtos {
             @NotBlank String currency,
             @NotBlank @Pattern(regexp = "\\d{4}-\\d{2}-\\d{2}") String receivedDate,
             @Min(1) @Max(6) Integer weekOfMonth) {
+    }
+
+    // ---- Subscriptions --------------------------------------------------
+
+    public record SubscriptionPlanDto(
+            Long id, String label, long amount,
+            Long categoryId, String currency,
+            Long startMonthId, boolean active) {
+    }
+
+    public record SubscriptionPlanRequest(
+            @NotBlank String label,
+            @NotNull @PositiveOrZero Long amount,
+            @NotBlank String currency,
+            @NotNull @Min(1970) @Max(9999) Integer startYear,
+            @NotNull @Min(1) @Max(12) Integer startMonth) {
     }
 
     // ---- Errors ----------------------------------------------------------

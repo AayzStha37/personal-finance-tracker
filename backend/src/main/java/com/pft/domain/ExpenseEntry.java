@@ -36,4 +36,7 @@ public class ExpenseEntry {
 
     @Column(name = "emi_installment_id")
     private Long emiInstallmentId;
+
+    @Column(name = "subscription_plan_id")
+    private Long subscriptionPlanId;
 }
