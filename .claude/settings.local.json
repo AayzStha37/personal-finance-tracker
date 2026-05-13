@@ -31,7 +31,8 @@
       "Bash(ls mvnw*)",
       "Bash(ls -la *.cmd)",
       "Bash(ls -la *.bat)",
-      "Bash(xargs grep:*)"
+      "Bash(xargs grep:*)",
+      "Bash(git add *)"
     ]
   },
   "enableAllProjectMcpServers": true,

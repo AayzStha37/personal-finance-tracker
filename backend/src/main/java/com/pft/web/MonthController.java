@@ -76,6 +76,12 @@ public class MonthController {
         return monthService.lock(id);
     }
 
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> delete(@PathVariable Long id) {
+        monthService.delete(id);
+        return ResponseEntity.noContent().build();
+    }
+
     // ---- nested resource endpoints --------------------------------------
 
     @GetMapping("/{id}/balances")

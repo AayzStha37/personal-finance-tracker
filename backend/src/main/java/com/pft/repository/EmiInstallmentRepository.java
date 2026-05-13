@@ -16,4 +16,6 @@ public interface EmiInstallmentRepository extends JpaRepository<EmiInstallment, 
     List<EmiInstallment> findAllByDueMonthIdAndStatus(Long dueMonthId, InstallmentStatus status);
 
     Optional<EmiInstallment> findByPlanIdAndSeqNo(Long planId, int seqNo);
+
+    void deleteByDueMonthId(Long dueMonthId);
 }

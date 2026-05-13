@@ -8,4 +8,6 @@ import java.util.List;
 public interface IncomeEntryRepository extends JpaRepository<IncomeEntry, Long> {
 
     List<IncomeEntry> findAllByMonthIdOrderByReceivedDateAscIdAsc(Long monthId);
+
+    void deleteByMonthId(Long monthId);
 }

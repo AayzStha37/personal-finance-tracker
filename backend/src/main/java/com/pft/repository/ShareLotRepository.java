@@ -12,4 +12,6 @@ public interface ShareLotRepository extends JpaRepository<ShareLot, Long> {
     List<ShareLot> findAllByMonthIdOrderByPurchasedDateAsc(Long monthId);
 
     List<ShareLot> findAllByInvestmentId(Long investmentId);
+
+    void deleteByMonthId(Long monthId);
 }
